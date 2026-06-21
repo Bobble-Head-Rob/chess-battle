@@ -443,8 +443,15 @@ function renderPiece(piece) {
   const hpWrap = document.createElement("span");
   hpWrap.className = "hp-wrap";
   const hpText = document.createElement("span");
-  hpText.className = "hp-text";
-  hpText.textContent = `${piece.hp}/${piece.maxHp}`;
+  hpText.className = `hp-text${piece.hp < piece.maxHp ? " damaged" : ""}`;
+  const hpHeart = document.createElement("span");
+  hpHeart.className = "hp-heart";
+  hpHeart.setAttribute("aria-hidden", "true");
+  hpHeart.textContent = "♥";
+  const hpValue = document.createElement("span");
+  hpValue.className = "hp-value";
+  hpValue.textContent = `${piece.hp}/${piece.maxHp}`;
+  hpText.append(hpHeart, hpValue);
   const hpBar = document.createElement("span");
   hpBar.className = "hp-bar";
   const hpFill = document.createElement("span");
