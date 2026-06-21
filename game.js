@@ -946,8 +946,7 @@ function canAttackGeometry(actor, fromRow, fromCol, toRow, toCol, ignoreIds = ne
   ignore.add(actor.id);
 
   if (actor.type === "pawn") {
-    const forward = actor.side === "player" ? -1 : 1;
-    return dr === forward && absC <= 1;
+    return dr === pawnForward(actor.side) && absC === 1;
   }
   if (actor.type === "king") {
     return Math.max(absR, absC) === 1;
@@ -971,12 +970,8 @@ function canAttackGeometry(actor, fromRow, fromCol, toRow, toCol, ignoreIds = ne
 
 function legalMoves(piece) {
   if (piece.type === "pawn") {
-    const forward = piece.side === "player" ? -1 : 1;
-    return [
-      { row: piece.row + forward, col: piece.col },
-      { row: piece.row + forward, col: piece.col - 1 },
-      { row: piece.row + forward, col: piece.col + 1 },
-    ].filter((move) => isOpen(move.row, move.col));
+    const move = { row: piece.row + pawnForward(piece.side), col: piece.col };
+    return isOpen(move.row, move.col) ? [move] : [];
   }
   if (piece.type === "king") {
     return surroundingDirections().map(([dr, dc]) => ({ row: piece.row + dr, col: piece.col + dc })).filter((move) => isOpen(move.row, move.col));
@@ -1051,6 +1046,10 @@ function surroundingDirections() {
     [1, 0],
     [1, 1],
   ];
+}
+
+function pawnForward(side) {
+  return side === "player" ? -1 : 1;
 }
 
 function isPathClear(fromRow, fromCol, toRow, toCol, ignoreIds = new Set()) {

@@ -14,6 +14,12 @@ Melee pieces:
 - If attack kills target, move into target square.
 - If attack does not kill target, stay in original square for v0.
 
+Pawns:
+- Player pawns move one square straight upward if empty.
+- Enemy pawns move one square straight downward if empty.
+- Pawns attack one square diagonally forward only when an enemy occupies that square.
+- Pawns hold if blocked and no legal diagonal attack is available.
+
 Knight:
 - Short-ranged leaping striker.
 - Attacks using L-shape range.
