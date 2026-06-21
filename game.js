@@ -129,6 +129,15 @@ const SPEEDS = {
   fast: { loopDelay: 150, effect: 180 },
 };
 
+const MOVE_PROFILES = {
+  pawn: { danger: 0.38, protection: 1.25, lane: 0 },
+  knight: { danger: 0.76, protection: 0.8, lane: 0 },
+  bishop: { danger: 1.08, protection: 0.9, lane: 4.8 },
+  rook: { danger: 1.22, protection: 0.9, lane: 5.8 },
+  queen: { danger: 2.1, protection: 1.0, lane: 4.6 },
+  king: { danger: 1.45, protection: 1.2, lane: 0 },
+};
+
 const boardEl = document.getElementById("board");
 const effectLayer = document.getElementById("effectLayer");
 const pieceShopEl = document.getElementById("pieceShop");
@@ -658,10 +667,22 @@ function chooseMove(actor) {
   let best = null;
   let bestScore = -Infinity;
   const targets = sidePieces(opponentSide(actor.side));
+  const coverage = buildMoveCoverage(actor);
+  const currentSafety = scoreSquareSafety(actor, { row: actor.row, col: actor.col }, coverage);
+
   moves.forEach((move) => {
-    let moveScore = -Infinity;
+    const safety = scoreSquareSafety(actor, move, coverage);
+    const safetyGain = currentSafety.penalty - safety.penalty;
+    let moveScore = safety.score + Math.max(-30, Math.min(44, safetyGain * 0.38));
     let useful = false;
     let moveReason = "closing distance";
+
+    if (safetyGain > 24) {
+      useful = true;
+      moveReason = "choosing a safer square";
+    }
+
+    let bestTargetScore = -Infinity;
     targets.forEach((target) => {
       const fromDistance = distance(actor, target);
       const toDistance = distance(move, target);
@@ -677,23 +698,158 @@ function chooseMove(actor) {
         score += (fromDistance - toDistance) * 16;
         useful = true;
       }
-      if (PIECES[actor.type].role === "ranged" && hasAnyLineFrom(actor, move.row, move.col)) {
-        score += 28;
-        useful = true;
-        moveReason = "opening a firing line";
-      }
-      if (score > moveScore) {
-        moveScore = score;
+      if (score > bestTargetScore) {
+        bestTargetScore = score;
       }
     });
 
+    if (bestTargetScore > 0) {
+      moveScore += bestTargetScore;
+    }
+
+    if (PIECES[actor.type].role === "ranged") {
+      if (hasAnyLineFrom(actor, move.row, move.col)) {
+        moveScore += 28;
+        useful = true;
+        moveReason = "opening a firing line";
+      }
+      const laneBonus = openLineScore(actor, move.row, move.col) * MOVE_PROFILES[actor.type].lane;
+      moveScore += safety.danger.attackers > 0 ? laneBonus * 0.35 : laneBonus;
+      if (laneBonus > 0 && safety.danger.attackers === 0) {
+        useful = true;
+      }
+    }
+
+    if ((actor.type === "pawn" || actor.type === "king") && safety.protection.attackers > 0) {
+      moveScore += actor.type === "pawn" ? 12 : 8;
+      if (toForwardProgress(actor, move) > 0) {
+        moveReason = "advancing under protection";
+      }
+    }
+
+    if (safety.danger.attackers === 0 && currentSafety.danger.attackers > 0 && moveReason === "closing distance") {
+      moveReason = "stepping out of danger";
+    }
+
     if (useful && moveScore > bestScore) {
       bestScore = moveScore;
-      best = { row: move.row, col: move.col, reason: moveReason };
+      best = { row: move.row, col: move.col, reason: safetyAwareReason(moveReason, safety) };
     }
   });
 
   return best;
+}
+
+function buildMoveCoverage(actor) {
+  const ignoreIds = new Set([actor.id]);
+  return {
+    danger: buildCoverageMap(opponentSide(actor.side), ignoreIds),
+    protection: buildCoverageMap(actor.side, ignoreIds),
+  };
+}
+
+function buildCoverageMap(attackingSide, ignoreIds = new Set()) {
+  const size = boardSize();
+  const map = Array.from({ length: size }, () =>
+    Array.from({ length: size }, () => ({
+      attackers: 0,
+      damage: 0,
+      maxDamage: 0,
+      pieces: [],
+    }))
+  );
+
+  sidePieces(attackingSide).forEach((attacker) => {
+    if (ignoreIds.has(attacker.id)) {
+      return;
+    }
+    for (let row = 0; row < size; row += 1) {
+      for (let col = 0; col < size; col += 1) {
+        if (canThreatenSquare(attacker, row, col, ignoreIds)) {
+          const coverage = map[row][col];
+          coverage.attackers += 1;
+          coverage.damage += attacker.damage;
+          coverage.maxDamage = Math.max(coverage.maxDamage, attacker.damage);
+          coverage.pieces.push(attacker);
+        }
+      }
+    }
+  });
+
+  return map;
+}
+
+function scoreSquareSafety(actor, square, coverage) {
+  const danger = coverage.danger[square.row][square.col];
+  const protection = coverage.protection[square.row][square.col];
+  const profile = MOVE_PROFILES[actor.type];
+  const value = PIECES[actor.type].cost;
+  const netDamage = Math.max(0, danger.damage - protection.damage * 0.55);
+  const netAttackers = Math.max(0, danger.attackers - protection.attackers * 0.65);
+  let penalty = profile.danger * (netDamage * (15 + value * 2.6) + netAttackers * (16 + value * 3.2));
+
+  if (danger.damage >= actor.hp) {
+    const survivalPenalty = actor.type === "pawn" ? 34 : 96;
+    penalty += profile.danger * (survivalPenalty + value * 12);
+    if (actor.type !== "pawn" && protection.attackers === 0) {
+      penalty += profile.danger * (80 + value * 10);
+    }
+  }
+  if (danger.attackers >= 2 && protection.attackers === 0) {
+    penalty += profile.danger * (20 + value * 4);
+  }
+  if (actor.type === "queen" && danger.attackers > 0) {
+    penalty += 90 + danger.attackers * 25;
+  }
+
+  let reward = profile.protection * (protection.attackers * 8 + protection.damage * 3);
+  if (danger.attackers > 0 && protection.attackers > 0) {
+    reward += profile.protection * protection.attackers * 7;
+  }
+
+  return {
+    danger,
+    protection,
+    penalty,
+    reward,
+    score: reward - penalty,
+  };
+}
+
+function safetyAwareReason(reason, safety) {
+  if (safety.danger.attackers === 0 && reason === "choosing a safer square") {
+    return reason;
+  }
+  if (safety.danger.attackers > 0 && safety.protection.attackers > 0) {
+    return `${reason} with support`;
+  }
+  return reason;
+}
+
+function toForwardProgress(actor, move) {
+  const forward = actor.side === "player" ? -1 : 1;
+  return (move.row - actor.row) * forward;
+}
+
+function openLineScore(actor, row, col) {
+  return directionsFor(actor.type).reduce((score, [dr, dc]) => {
+    let nextRow = row + dr;
+    let nextCol = col + dc;
+    let openSquares = 0;
+    while (inBounds(nextRow, nextCol)) {
+      const occupant = pieceAt(nextRow, nextCol, new Set([actor.id]));
+      if (occupant) {
+        if (occupant.side !== actor.side) {
+          openSquares += 2;
+        }
+        break;
+      }
+      openSquares += 1;
+      nextRow += dr;
+      nextCol += dc;
+    }
+    return score + Math.min(openSquares, 5);
+  }, 0);
 }
 
 async function resolveAttack(actor, target) {
@@ -767,11 +923,23 @@ function canAttackFrom(actor, row, col, target) {
   if (actor.side === target.side) {
     return false;
   }
-  const dr = target.row - row;
-  const dc = target.col - col;
+  return canAttackGeometry(actor, row, col, target.row, target.col, new Set([actor.id]));
+}
+
+function canThreatenSquare(attacker, row, col, ignoreIds = new Set()) {
+  return canAttackGeometry(attacker, attacker.row, attacker.col, row, col, ignoreIds);
+}
+
+function canAttackGeometry(actor, fromRow, fromCol, toRow, toCol, ignoreIds = new Set()) {
+  if (!inBounds(toRow, toCol) || (fromRow === toRow && fromCol === toCol)) {
+    return false;
+  }
+  const dr = toRow - fromRow;
+  const dc = toCol - fromCol;
   const absR = Math.abs(dr);
   const absC = Math.abs(dc);
-  const ignore = new Set([actor.id]);
+  const ignore = new Set(ignoreIds);
+  ignore.add(actor.id);
 
   if (actor.type === "pawn") {
     const forward = actor.side === "player" ? -1 : 1;
@@ -784,15 +952,15 @@ function canAttackFrom(actor, row, col, target) {
     return (absR === 2 && absC === 1) || (absR === 1 && absC === 2);
   }
   if (actor.type === "bishop") {
-    return absR === absC && absR > 0 && isPathClear(row, col, target.row, target.col, ignore);
+    return absR === absC && absR > 0 && isPathClear(fromRow, fromCol, toRow, toCol, ignore);
   }
   if (actor.type === "rook") {
-    return (dr === 0 || dc === 0) && (absR + absC > 0) && isPathClear(row, col, target.row, target.col, ignore);
+    return (dr === 0 || dc === 0) && (absR + absC > 0) && isPathClear(fromRow, fromCol, toRow, toCol, ignore);
   }
   if (actor.type === "queen") {
     const straight = dr === 0 || dc === 0;
     const diagonal = absR === absC;
-    return (straight || diagonal) && (absR + absC > 0) && isPathClear(row, col, target.row, target.col, ignore);
+    return (straight || diagonal) && (absR + absC > 0) && isPathClear(fromRow, fromCol, toRow, toCol, ignore);
   }
   return false;
 }
