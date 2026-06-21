@@ -123,6 +123,15 @@ const PIECES = {
   },
 };
 
+const PIECE_ROLES = {
+  pawn: "Moves forward, attacks diagonally.",
+  knight: "L-shape skirmisher; returns if target survives.",
+  bishop: "Diagonal ranged attacker.",
+  rook: "Straight-line ranged attacker.",
+  queen: "Powerful ranged attacker.",
+  king: "Slow melee bruiser.",
+};
+
 const SPEEDS = {
   slow: { loopDelay: 900, effect: 620 },
   normal: { loopDelay: 460, effect: 360 },
@@ -149,6 +158,8 @@ const enemyCountEl = document.getElementById("enemyCount");
 const playerCompositionEl = document.getElementById("playerComposition");
 const enemyCompositionEl = document.getElementById("enemyComposition");
 const placementHintEl = document.getElementById("placementHint");
+const inspectHintEl = document.getElementById("inspectHint");
+const inspectDetailsEl = document.getElementById("inspectDetails");
 const scenarioSelectEl = document.getElementById("scenarioSelect");
 const scenarioSummaryEl = document.getElementById("scenarioSummary");
 const scoreboardEl = document.getElementById("scoreboard");
@@ -174,6 +185,7 @@ const state = {
   result: null,
   speed: "normal",
   activeId: null,
+  inspectedId: null,
   destination: null,
   actionBusy: false,
   loopRunning: false,
@@ -225,6 +237,7 @@ function resetState() {
   state.phase = "setup";
   state.result = null;
   state.activeId = null;
+  state.inspectedId = null;
   state.destination = null;
   state.actionBusy = false;
   state.loopRunning = false;
@@ -260,6 +273,7 @@ function render() {
   renderShop();
   renderBoard();
   renderStatus();
+  renderInspectPanel();
   renderScoreboard();
   renderLog();
 }
@@ -346,6 +360,9 @@ function renderBoard() {
       if (state.activeId && occupyingPiece?.id === state.activeId) {
         cell.classList.add("active-unit");
       }
+      if (state.inspectedId && occupyingPiece?.id === state.inspectedId) {
+        cell.classList.add("inspected-unit");
+      }
       if (state.destination && state.destination.row === row && state.destination.col === col) {
         cell.classList.add("move-destination");
       }
@@ -356,7 +373,10 @@ function renderBoard() {
       cell.appendChild(coord);
 
       if (occupyingPiece) {
+        cell.dataset.pieceId = String(occupyingPiece.id);
         cell.appendChild(renderPiece(occupyingPiece));
+        cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id, false));
+        cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id, false));
       }
 
       cell.addEventListener("click", () => handleCellClick(row, col));
@@ -434,6 +454,70 @@ function renderStatus() {
   }
 }
 
+function renderInspectPanel() {
+  const piece = state.inspectedId ? state.pieces.find((item) => item.id === state.inspectedId) : null;
+  inspectHintEl.hidden = Boolean(piece);
+  inspectDetailsEl.hidden = !piece;
+  inspectDetailsEl.innerHTML = "";
+
+  if (!piece) {
+    state.inspectedId = null;
+    inspectHintEl.textContent = "Hover or click a piece on the board to inspect its stats.";
+    return;
+  }
+
+  const template = PIECES[piece.type];
+  const title = document.createElement("div");
+  title.className = `inspect-title ${piece.side}`;
+  const symbol = document.createElement("span");
+  symbol.className = "inspect-symbol";
+  symbol.textContent = template.symbols[piece.side];
+  const name = document.createElement("span");
+  name.textContent = `${sideName(piece.side)} ${template.label}`;
+  title.append(symbol, name);
+
+  const stats = document.createElement("div");
+  stats.className = "inspect-stats";
+  [
+    ["Team", sideName(piece.side)],
+    ["Type", template.label],
+    ["HP", `${piece.hp}/${piece.maxHp}`],
+    ["Damage", String(piece.damage)],
+    ["Speed", String(piece.speed)],
+    ["Initiative", String(piece.initiative)],
+    ["Cost / Value", String(template.cost)],
+  ].forEach(([label, value]) => {
+    const item = document.createElement("div");
+    const labelEl = document.createElement("span");
+    labelEl.textContent = label;
+    const valueEl = document.createElement("strong");
+    valueEl.textContent = value;
+    item.append(labelEl, valueEl);
+    stats.appendChild(item);
+  });
+
+  const role = document.createElement("p");
+  role.className = "inspect-role";
+  role.textContent = PIECE_ROLES[piece.type];
+  inspectDetailsEl.append(title, stats, role);
+}
+
+function inspectPiece(pieceId, refreshBoard = true) {
+  state.inspectedId = pieceId;
+  renderInspectPanel();
+  if (refreshBoard) {
+    renderBoard();
+  } else {
+    markInspectedCell();
+  }
+}
+
+function markInspectedCell() {
+  Array.from(boardEl.children).forEach((cell) => {
+    cell.classList.toggle("inspected-unit", Number(cell.dataset.pieceId) === state.inspectedId);
+  });
+}
+
 function renderLog() {
   actionLogEl.innerHTML = "";
   state.log.slice(-120).forEach((entry) => {
@@ -451,6 +535,15 @@ function renderLog() {
 }
 
 function handleCellClick(row, col) {
+  const occupyingPiece = pieceAt(row, col);
+  if (occupyingPiece) {
+    if (state.phase === "setup" && state.removeMode) {
+      removePlayerPiece(row, col);
+      return;
+    }
+    inspectPiece(occupyingPiece.id);
+    return;
+  }
   if (state.phase !== "setup") {
     return;
   }
@@ -481,6 +574,7 @@ function placePlayerPiece(row, col) {
   state.budget -= template.cost;
   const piece = createPiece("player", state.selectedType, row, col);
   state.pieces.push(piece);
+  state.inspectedId = piece.id;
   addLog(`Player ${template.label} deployed on ${squareName(row, col)} for ${template.cost}.`, "system");
   render();
 }
@@ -494,6 +588,9 @@ function removePlayerPiece(row, col) {
     return;
   }
   state.pieces = state.pieces.filter((item) => item.id !== piece.id);
+  if (state.inspectedId === piece.id) {
+    state.inspectedId = null;
+  }
   state.budget += PIECES[piece.type].cost;
   addLog(`Player ${PIECES[piece.type].label} removed from ${squareName(row, col)}. Refunded ${PIECES[piece.type].cost}.`, "system");
   render();

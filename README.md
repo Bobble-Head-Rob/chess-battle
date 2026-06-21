@@ -14,6 +14,7 @@ v0 scope:
 - Readable 2D board.
 - Piece placement.
 - Scenario selection.
+- How to Play and piece inspection panels.
 - Start/pause/step battle loop.
 - Initiative system.
 - Basic piece AI.

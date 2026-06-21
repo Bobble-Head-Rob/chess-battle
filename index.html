@@ -36,6 +36,18 @@
             <p id="scenarioSummary">Variety Skirmish: 10x10 board, 50 budget, 16 varied enemies.</p>
           </div>
 
+          <section class="how-to-panel" aria-labelledby="howToTitle">
+            <h2 id="howToTitle">How to Play</h2>
+            <ul>
+              <li>Pick pieces from the shop and place them in the blue deployment zone.</li>
+              <li>Stay within budget, then press Start Battle.</li>
+              <li>Pieces act by initiative; faster pieces act more often.</li>
+              <li>Ranged pieces fire from position. Knights strike in an L-shape and return if the target survives.</li>
+              <li>Pawns move straight forward and attack diagonally.</li>
+              <li>Destroy the enemy army. Score depends on result, actions, budget, and losses.</li>
+            </ul>
+          </section>
+
           <div class="piece-shop" id="pieceShop" aria-label="Piece shop"></div>
 
           <div class="placement-tools">
@@ -55,6 +67,12 @@
               <p id="enemyComposition">Pawn x8, Knight x4, Bishop x2, Rook x1, Queen x1</p>
             </div>
           </div>
+
+          <section class="inspect-panel" aria-labelledby="inspectTitle">
+            <h2 id="inspectTitle">Inspect Piece</h2>
+            <p id="inspectHint">Hover or click a piece on the board to inspect its stats.</p>
+            <div id="inspectDetails" class="inspect-details" hidden></div>
+          </section>
         </aside>
 
         <section class="battlefield-panel">

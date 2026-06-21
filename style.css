@@ -301,6 +301,100 @@ select:disabled {
   line-height: 1.35;
 }
 
+.how-to-panel,
+.inspect-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.how-to-panel h2,
+.inspect-panel h2 {
+  margin: 0 0 8px;
+  font-size: 1.02rem;
+}
+
+.how-to-panel ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: #314052;
+  font-size: 0.84rem;
+  line-height: 1.32;
+}
+
+.inspect-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.inspect-details {
+  display: grid;
+  gap: 8px;
+}
+
+.inspect-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.inspect-symbol {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #ffffff;
+  font-size: 1.25rem;
+}
+
+.inspect-title.player .inspect-symbol {
+  color: var(--player);
+  border-color: rgba(31, 120, 209, 0.4);
+  background: var(--player-soft);
+}
+
+.inspect-title.enemy .inspect-symbol {
+  color: var(--enemy);
+  border-color: rgba(217, 67, 67, 0.4);
+  background: var(--enemy-soft);
+}
+
+.inspect-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.inspect-stats div {
+  display: grid;
+  gap: 2px;
+}
+
+.inspect-stats span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inspect-stats strong {
+  font-size: 0.92rem;
+}
+
+.inspect-role {
+  color: #314052;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
 .army-summary {
   display: grid;
   align-items: stretch;
@@ -620,6 +714,11 @@ select:disabled {
 .cell.active-unit .piece {
   transform: translateY(-3px) scale(1.08);
   box-shadow: 0 0 0 4px rgba(245, 200, 75, 0.75), 0 8px 18px rgba(20, 28, 38, 0.34);
+}
+
+.cell.inspected-unit:not(.active-unit) .piece {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 0 0 4px rgba(25, 135, 84, 0.58), 0 8px 18px rgba(20, 28, 38, 0.3);
 }
 
 .effect-layer {
