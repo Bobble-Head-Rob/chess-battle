@@ -301,24 +301,71 @@ select:disabled {
   line-height: 1.35;
 }
 
-.how-to-panel,
 .inspect-panel {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
 
-.how-to-panel h2,
 .inspect-panel h2 {
   margin: 0 0 8px;
   font-size: 1.02rem;
 }
 
+.how-to-panel {
+  margin: 0 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.how-to-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+}
+
+.how-to-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.how-to-panel summary::after {
+  content: "+";
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--player-soft);
+  color: var(--player);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.how-to-panel[open] summary::after {
+  content: "-";
+}
+
+.how-to-panel summary small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .how-to-panel ul {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
   margin: 0;
-  padding-left: 18px;
+  padding: 9px 12px 11px 28px;
+  border-top: 1px solid var(--line);
   color: #314052;
   font-size: 0.84rem;
   line-height: 1.32;
@@ -955,6 +1002,10 @@ select:disabled {
 
   .scoreboard-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .how-to-panel ul {
+    grid-template-columns: 1fr;
   }
 
   .piece-shop {
