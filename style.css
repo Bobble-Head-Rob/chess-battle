@@ -302,9 +302,9 @@ select:disabled {
 }
 
 .inspect-panel {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .inspect-panel h2 {
@@ -907,16 +907,23 @@ select:disabled {
   border-color: #b18412;
 }
 
-.log-panel {
-  min-height: min(720px, calc(100vh - 140px));
+.battle-info-panel {
+  height: min(720px, calc(100vh - 140px));
+  min-height: 520px;
+  display: grid;
+  grid-template-rows: auto minmax(340px, 1fr);
+  gap: 12px;
+}
+
+.log-section {
+  min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .action-log {
   margin-top: 12px;
-  min-height: 420px;
-  max-height: calc(100vh - 210px);
+  min-height: 340px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -959,9 +966,19 @@ select:disabled {
     grid-template-columns: 230px minmax(480px, 1fr);
   }
 
-  .log-panel {
+  .battle-info-panel {
     grid-column: 1 / -1;
-    min-height: 260px;
+    height: auto;
+    min-height: 300px;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    grid-template-rows: auto;
+    align-items: stretch;
+  }
+
+  .inspect-panel {
+    padding: 0 12px 0 0;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
   }
 
   .action-log {
@@ -990,6 +1007,24 @@ select:disabled {
 
   .game-layout {
     grid-template-columns: 1fr;
+  }
+
+  .battle-info-panel {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(260px, 1fr);
+    height: auto;
+    min-height: 0;
+  }
+
+  .inspect-panel {
+    padding: 0 0 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .action-log {
+    max-height: 320px;
+    min-height: 240px;
   }
 
   .board-shell {

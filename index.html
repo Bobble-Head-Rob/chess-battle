@@ -56,11 +56,6 @@
             </div>
           </div>
 
-          <section class="inspect-panel" aria-labelledby="inspectTitle">
-            <h2 id="inspectTitle">Inspect Piece</h2>
-            <p id="inspectHint">Hover or click a piece on the board to inspect its stats.</p>
-            <div id="inspectDetails" class="inspect-details" hidden></div>
-          </section>
         </aside>
 
         <section class="battlefield-panel">
@@ -121,12 +116,20 @@
           </div>
         </section>
 
-        <aside class="panel log-panel">
-          <div class="panel-header">
-            <h2>Battle Log</h2>
-            <button id="clearLogButton" type="button" class="tool-button">Clear</button>
-          </div>
-          <div id="actionLog" class="action-log" aria-live="polite" aria-label="Battle action log"></div>
+        <aside class="panel battle-info-panel">
+          <section class="inspect-panel" aria-labelledby="inspectTitle">
+            <h2 id="inspectTitle">Inspect Piece</h2>
+            <p id="inspectHint">Hover or click a piece on the board to inspect its stats.</p>
+            <div id="inspectDetails" class="inspect-details" hidden></div>
+          </section>
+
+          <section class="log-section" aria-labelledby="battleLogTitle">
+            <div class="panel-header">
+              <h2 id="battleLogTitle">Battle Log</h2>
+              <button id="clearLogButton" type="button" class="tool-button">Clear</button>
+            </div>
+            <div id="actionLog" class="action-log" aria-live="polite" aria-label="Battle action log"></div>
+          </section>
         </aside>
       </section>
     </main>
