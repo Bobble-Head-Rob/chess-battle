@@ -119,6 +119,13 @@
         <aside class="panel battle-info-panel">
           <section class="inspect-panel" aria-labelledby="inspectTitle">
             <h2 id="inspectTitle">Inspect Piece</h2>
+            <div class="overlay-controls" aria-label="Board overlay toggles">
+              <span>Overlays</span>
+              <label><input id="overlayMoves" type="checkbox" checked> Moves</label>
+              <label><input id="overlayAttacks" type="checkbox" checked> Attacks</label>
+              <label><input id="overlayThreat" type="checkbox"> Enemy Threat</label>
+              <label><input id="overlayProtection" type="checkbox"> Friendly Protection</label>
+            </div>
             <p id="inspectHint">Hover or click a piece on the board to inspect its stats.</p>
             <div id="inspectDetails" class="inspect-details" hidden></div>
           </section>

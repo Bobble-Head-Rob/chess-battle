@@ -160,6 +160,10 @@ const enemyCompositionEl = document.getElementById("enemyComposition");
 const placementHintEl = document.getElementById("placementHint");
 const inspectHintEl = document.getElementById("inspectHint");
 const inspectDetailsEl = document.getElementById("inspectDetails");
+const overlayMovesEl = document.getElementById("overlayMoves");
+const overlayAttacksEl = document.getElementById("overlayAttacks");
+const overlayThreatEl = document.getElementById("overlayThreat");
+const overlayProtectionEl = document.getElementById("overlayProtection");
 const scenarioSelectEl = document.getElementById("scenarioSelect");
 const scenarioSummaryEl = document.getElementById("scenarioSummary");
 const scoreboardEl = document.getElementById("scoreboard");
@@ -186,6 +190,12 @@ const state = {
   speed: "normal",
   activeId: null,
   inspectedId: null,
+  overlays: {
+    moves: true,
+    attacks: true,
+    threat: false,
+    protection: false,
+  },
   destination: null,
   actionBusy: false,
   loopRunning: false,
@@ -273,6 +283,7 @@ function render() {
   renderShop();
   renderBoard();
   renderStatus();
+  renderOverlayControls();
   renderInspectPanel();
   renderScoreboard();
   renderLog();
@@ -331,6 +342,7 @@ function renderShop() {
 
 function renderBoard() {
   const size = boardSize();
+  const boardOverlays = buildBoardOverlays();
   boardEl.innerHTML = "";
   boardEl.style.setProperty("--board-size", String(size));
   boardEl.setAttribute("aria-label", `${size} by ${size} battle board`);
@@ -372,11 +384,19 @@ function renderBoard() {
       coord.textContent = squareName(row, col);
       cell.appendChild(coord);
 
+      const overlays = boardOverlays.get(squareKey(row, col)) || [];
+      overlays.forEach((type) => {
+        const marker = document.createElement("span");
+        marker.className = `overlay-marker overlay-${type}`;
+        marker.setAttribute("aria-hidden", "true");
+        cell.appendChild(marker);
+      });
+
       if (occupyingPiece) {
         cell.dataset.pieceId = String(occupyingPiece.id);
         cell.appendChild(renderPiece(occupyingPiece));
-        cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id, false));
-        cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id, false));
+        cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id));
+        cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id));
       }
 
       cell.addEventListener("click", () => handleCellClick(row, col));
@@ -454,8 +474,19 @@ function renderStatus() {
   }
 }
 
+function renderOverlayControls() {
+  const hasSelection = Boolean(inspectedPiece());
+  overlayMovesEl.checked = state.overlays.moves;
+  overlayAttacksEl.checked = state.overlays.attacks;
+  overlayThreatEl.checked = state.overlays.threat;
+  overlayProtectionEl.checked = state.overlays.protection;
+  [overlayMovesEl, overlayAttacksEl, overlayThreatEl, overlayProtectionEl].forEach((input) => {
+    input.disabled = !hasSelection;
+  });
+}
+
 function renderInspectPanel() {
-  const piece = state.inspectedId ? state.pieces.find((item) => item.id === state.inspectedId) : null;
+  const piece = inspectedPiece();
   inspectHintEl.hidden = Boolean(piece);
   inspectDetailsEl.hidden = !piece;
   inspectDetailsEl.innerHTML = "";
@@ -503,9 +534,11 @@ function renderInspectPanel() {
 }
 
 function inspectPiece(pieceId, refreshBoard = true) {
+  const alreadyInspected = state.inspectedId === pieceId;
   state.inspectedId = pieceId;
+  renderOverlayControls();
   renderInspectPanel();
-  if (refreshBoard) {
+  if (refreshBoard && !alreadyInspected) {
     renderBoard();
   } else {
     markInspectedCell();
@@ -516,6 +549,117 @@ function markInspectedCell() {
   Array.from(boardEl.children).forEach((cell) => {
     cell.classList.toggle("inspected-unit", Number(cell.dataset.pieceId) === state.inspectedId);
   });
+}
+
+function inspectedPiece() {
+  return state.inspectedId ? state.pieces.find((item) => item.id === state.inspectedId) || null : null;
+}
+
+function buildBoardOverlays() {
+  const overlays = new Map();
+  const piece = inspectedPiece();
+  if (!piece) {
+    return overlays;
+  }
+
+  if (state.overlays.threat) {
+    addCoverageOverlays(overlays, buildCoverageMap(opponentSide(piece.side)), "threat");
+  }
+  if (state.overlays.protection) {
+    addCoverageOverlays(overlays, buildCoverageMap(piece.side), "protection");
+  }
+  if (state.overlays.moves) {
+    legalMoves(piece).forEach((move) => addOverlay(overlays, move.row, move.col, "move"));
+  }
+  if (state.overlays.attacks) {
+    attackRangeSquares(piece).forEach((square) => addOverlay(overlays, square.row, square.col, "attack"));
+  }
+
+  return overlays;
+}
+
+function addCoverageOverlays(overlays, coverageMap, type) {
+  coverageMap.forEach((row, rowIndex) => {
+    row.forEach((coverage, colIndex) => {
+      if (coverage.attackers > 0) {
+        addOverlay(overlays, rowIndex, colIndex, type);
+      }
+    });
+  });
+}
+
+function addOverlay(overlays, row, col, type) {
+  if (!inBounds(row, col)) {
+    return;
+  }
+  const key = squareKey(row, col);
+  if (!overlays.has(key)) {
+    overlays.set(key, []);
+  }
+  const types = overlays.get(key);
+  if (!types.includes(type)) {
+    types.push(type);
+  }
+}
+
+function attackRangeSquares(piece) {
+  if (piece.type === "pawn") {
+    const forward = pawnForward(piece.side);
+    return [-1, 1]
+      .map((dc) => ({ row: piece.row + forward, col: piece.col + dc }))
+      .filter((square) => {
+        const occupant = pieceAt(square.row, square.col);
+        return inBounds(square.row, square.col) && occupant && occupant.side !== piece.side;
+      });
+  }
+
+  if (piece.type === "knight") {
+    return [
+      [-2, -1],
+      [-2, 1],
+      [-1, -2],
+      [-1, 2],
+      [1, -2],
+      [1, 2],
+      [2, -1],
+      [2, 1],
+    ]
+      .map(([dr, dc]) => ({ row: piece.row + dr, col: piece.col + dc }))
+      .filter((square) => isOpenOrEnemy(piece, square.row, square.col));
+  }
+
+  if (piece.type === "king") {
+    return surroundingDirections()
+      .map(([dr, dc]) => ({ row: piece.row + dr, col: piece.col + dc }))
+      .filter((square) => isOpenOrEnemy(piece, square.row, square.col));
+  }
+
+  const squares = [];
+  directionsFor(piece.type).forEach(([dr, dc]) => {
+    let row = piece.row + dr;
+    let col = piece.col + dc;
+    while (inBounds(row, col)) {
+      const occupant = pieceAt(row, col);
+      if (occupant) {
+        if (occupant.side !== piece.side) {
+          squares.push({ row, col });
+        }
+        break;
+      }
+      squares.push({ row, col });
+      row += dr;
+      col += dc;
+    }
+  });
+  return squares;
+}
+
+function isOpenOrEnemy(piece, row, col) {
+  if (!inBounds(row, col)) {
+    return false;
+  }
+  const occupant = pieceAt(row, col);
+  return !occupant || occupant.side !== piece.side;
 }
 
 function renderLog() {
@@ -1505,6 +1649,10 @@ function squareName(row, col) {
   return `${FILES[col]}${boardSize() - row}`;
 }
 
+function squareKey(row, col) {
+  return `${row},${col}`;
+}
+
 function sideName(side) {
   return side === "player" ? "Player" : "Enemy";
 }
@@ -1535,6 +1683,22 @@ removeModeButton.addEventListener("click", () => {
 });
 speedSelect.addEventListener("change", () => {
   state.speed = speedSelect.value;
+});
+overlayMovesEl.addEventListener("change", () => {
+  state.overlays.moves = overlayMovesEl.checked;
+  renderBoard();
+});
+overlayAttacksEl.addEventListener("change", () => {
+  state.overlays.attacks = overlayAttacksEl.checked;
+  renderBoard();
+});
+overlayThreatEl.addEventListener("change", () => {
+  state.overlays.threat = overlayThreatEl.checked;
+  renderBoard();
+});
+overlayProtectionEl.addEventListener("change", () => {
+  state.overlays.protection = overlayProtectionEl.checked;
+  renderBoard();
 });
 clearLogButton.addEventListener("click", () => {
   state.log = [];

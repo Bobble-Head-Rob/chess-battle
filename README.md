@@ -15,6 +15,7 @@ v0 scope:
 - Piece placement.
 - Scenario selection.
 - Collapsible How to Play help and piece inspection panels.
+- Tactical movement, attack, threat, and protection overlays.
 - Start/pause/step battle loop.
 - Initiative system.
 - Basic piece AI.
