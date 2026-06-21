@@ -23,7 +23,13 @@
         <aside class="panel setup-panel">
           <div class="panel-header">
             <h2>Army</h2>
-            <div class="budget-pill"><span>Budget</span><strong id="budgetValue">35</strong></div>
+            <div class="budget-pill"><span>Budget</span><strong id="budgetValue">50</strong></div>
+          </div>
+
+          <div class="scenario-control">
+            <label for="scenarioSelect">Scenario</label>
+            <select id="scenarioSelect"></select>
+            <p id="scenarioSummary">Variety Skirmish: 10x10 board, 50 budget, 16 varied enemies.</p>
           </div>
 
           <div class="piece-shop" id="pieceShop" aria-label="Piece shop"></div>
@@ -40,7 +46,7 @@
             </div>
             <div>
               <span>Black</span>
-              <strong id="enemyCount">30</strong>
+              <strong id="enemyCount">16</strong>
             </div>
           </div>
         </aside>
@@ -62,7 +68,7 @@
           </div>
 
           <div class="board-shell">
-            <div id="board" class="board" aria-label="12 by 12 battle board"></div>
+            <div id="board" class="board" aria-label="10 by 10 battle board"></div>
             <div id="effectLayer" class="effect-layer" aria-hidden="true"></div>
           </div>
 

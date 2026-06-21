@@ -41,11 +41,17 @@ Starter speeds:
 
 ## v0 Board
 
-- 12x12 board.
+- Scenario selector resets the board, budget, log, and battle state.
+- Default scenario: Variety Skirmish.
+- Variety Skirmish board: 10x10.
+- Variety Skirmish player budget: 50.
+- Variety Skirmish enemy army: 8 pawns, 4 knights, 2 bishops, 1 rook, 1 queen.
+- Alternate scenario: Pawn/Knight Swarm.
+- Pawn/Knight Swarm board: 12x12.
+- Pawn/Knight Swarm player budget: 55.
+- Pawn/Knight Swarm enemy army: 20 pawns and 10 knights.
 - Player deploys in bottom 3 rows.
 - Enemy deploys in top 3 rows.
-- Enemy v0 army: 20 pawns and 10 knights.
-- Player budget: 35.
 
 ## v0 UI
 

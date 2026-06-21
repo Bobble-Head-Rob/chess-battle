@@ -1,9 +1,70 @@
-const BOARD_SIZE = 12;
-const STARTING_BUDGET = 35;
-const PLAYER_DEPLOY_START = 9;
-const ENEMY_DEPLOY_END = 2;
 const ACTION_THRESHOLD = 10;
 const FILES = "ABCDEFGHIJKL";
+
+const SCENARIOS = {
+  variety: {
+    label: "Variety Skirmish",
+    boardSize: 10,
+    budget: 50,
+    summary: "10x10 board, 50 budget, 8 pawns, 4 knights, 2 bishops, 1 rook, 1 queen.",
+    enemies: [
+      { type: "bishop", row: 0, col: 2 },
+      { type: "queen", row: 0, col: 4 },
+      { type: "rook", row: 0, col: 5 },
+      { type: "bishop", row: 0, col: 7 },
+      { type: "knight", row: 1, col: 1 },
+      { type: "knight", row: 1, col: 3 },
+      { type: "knight", row: 1, col: 6 },
+      { type: "knight", row: 1, col: 8 },
+      { type: "pawn", row: 2, col: 1 },
+      { type: "pawn", row: 2, col: 2 },
+      { type: "pawn", row: 2, col: 3 },
+      { type: "pawn", row: 2, col: 4 },
+      { type: "pawn", row: 2, col: 5 },
+      { type: "pawn", row: 2, col: 6 },
+      { type: "pawn", row: 2, col: 7 },
+      { type: "pawn", row: 2, col: 8 },
+    ],
+  },
+  swarm: {
+    label: "Pawn/Knight Swarm",
+    boardSize: 12,
+    budget: 55,
+    summary: "12x12 board, 55 budget, 20 pawns and 10 knights.",
+    enemies: [
+      { type: "knight", row: 0, col: 1 },
+      { type: "knight", row: 0, col: 2 },
+      { type: "knight", row: 0, col: 3 },
+      { type: "knight", row: 0, col: 4 },
+      { type: "knight", row: 0, col: 5 },
+      { type: "knight", row: 0, col: 6 },
+      { type: "knight", row: 0, col: 7 },
+      { type: "knight", row: 0, col: 8 },
+      { type: "knight", row: 0, col: 9 },
+      { type: "knight", row: 0, col: 10 },
+      { type: "pawn", row: 1, col: 0 },
+      { type: "pawn", row: 1, col: 1 },
+      { type: "pawn", row: 1, col: 2 },
+      { type: "pawn", row: 1, col: 3 },
+      { type: "pawn", row: 1, col: 4 },
+      { type: "pawn", row: 1, col: 5 },
+      { type: "pawn", row: 1, col: 6 },
+      { type: "pawn", row: 1, col: 7 },
+      { type: "pawn", row: 1, col: 8 },
+      { type: "pawn", row: 1, col: 9 },
+      { type: "pawn", row: 1, col: 10 },
+      { type: "pawn", row: 1, col: 11 },
+      { type: "pawn", row: 2, col: 2 },
+      { type: "pawn", row: 2, col: 3 },
+      { type: "pawn", row: 2, col: 4 },
+      { type: "pawn", row: 2, col: 5 },
+      { type: "pawn", row: 2, col: 6 },
+      { type: "pawn", row: 2, col: 7 },
+      { type: "pawn", row: 2, col: 8 },
+      { type: "pawn", row: 2, col: 9 },
+    ],
+  },
+};
 
 const PIECES = {
   pawn: {
@@ -77,6 +138,8 @@ const budgetValueEl = document.getElementById("budgetValue");
 const playerCountEl = document.getElementById("playerCount");
 const enemyCountEl = document.getElementById("enemyCount");
 const placementHintEl = document.getElementById("placementHint");
+const scenarioSelectEl = document.getElementById("scenarioSelect");
+const scenarioSummaryEl = document.getElementById("scenarioSummary");
 const startButton = document.getElementById("startButton");
 const pauseButton = document.getElementById("pauseButton");
 const stepButton = document.getElementById("stepButton");
@@ -87,7 +150,8 @@ const clearLogButton = document.getElementById("clearLogButton");
 
 const state = {
   pieces: [],
-  budget: STARTING_BUDGET,
+  scenarioId: "variety",
+  budget: 0,
   selectedType: "pawn",
   removeMode: false,
   phase: "setup",
@@ -102,6 +166,22 @@ const state = {
   ticks: 0,
   log: [],
 };
+
+function currentScenario() {
+  return SCENARIOS[state.scenarioId];
+}
+
+function boardSize() {
+  return currentScenario().boardSize;
+}
+
+function playerDeployStart() {
+  return boardSize() - 3;
+}
+
+function enemyDeployEnd() {
+  return 2;
+}
 
 function createPiece(side, type, row, col) {
   const template = PIECES[type];
@@ -120,8 +200,9 @@ function createPiece(side, type, row, col) {
 }
 
 function resetState() {
+  const scenario = currentScenario();
   state.pieces = [];
-  state.budget = STARTING_BUDGET;
+  state.budget = scenario.budget;
   state.selectedType = "pawn";
   state.removeMode = false;
   state.phase = "setup";
@@ -135,27 +216,48 @@ function resetState() {
   state.ticks = 0;
   state.log = [];
   placeEnemyArmy();
-  addLog("Scenario ready: Black deploys 20 pawns and 10 knights. White has 35 points to spend.", "system");
+  addLog(`Scenario ready: ${scenario.label}. Black deploys ${enemySummary(scenario)}. White has ${scenario.budget} points to spend.`, "system");
   render();
 }
 
 function placeEnemyArmy() {
-  for (let col = 1; col <= 10; col += 1) {
-    state.pieces.push(createPiece("enemy", "knight", 0, col));
-  }
-  for (let col = 0; col < BOARD_SIZE; col += 1) {
-    state.pieces.push(createPiece("enemy", "pawn", 1, col));
-  }
-  for (let col = 2; col <= 9; col += 1) {
-    state.pieces.push(createPiece("enemy", "pawn", 2, col));
-  }
+  currentScenario().enemies.forEach((enemy) => {
+    state.pieces.push(createPiece("enemy", enemy.type, enemy.row, enemy.col));
+  });
+}
+
+function enemySummary(scenario) {
+  const counts = scenario.enemies.reduce((summary, enemy) => {
+    summary[enemy.type] = (summary[enemy.type] || 0) + 1;
+    return summary;
+  }, {});
+  return Object.keys(PIECES)
+    .filter((type) => counts[type])
+    .map((type) => `${counts[type]} ${counts[type] === 1 ? PIECES[type].label.toLowerCase() : `${PIECES[type].label.toLowerCase()}s`}`)
+    .join(", ");
 }
 
 function render() {
+  renderScenarioSelect();
   renderShop();
   renderBoard();
   renderStatus();
   renderLog();
+}
+
+function renderScenarioSelect() {
+  if (scenarioSelectEl.children.length === Object.keys(SCENARIOS).length) {
+    scenarioSelectEl.value = state.scenarioId;
+    return;
+  }
+  scenarioSelectEl.innerHTML = "";
+  Object.entries(SCENARIOS).forEach(([id, scenario]) => {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = scenario.label;
+    scenarioSelectEl.appendChild(option);
+  });
+  scenarioSelectEl.value = state.scenarioId;
 }
 
 function renderShop() {
@@ -195,9 +297,12 @@ function renderShop() {
 }
 
 function renderBoard() {
+  const size = boardSize();
   boardEl.innerHTML = "";
-  for (let row = 0; row < BOARD_SIZE; row += 1) {
-    for (let col = 0; col < BOARD_SIZE; col += 1) {
+  boardEl.style.setProperty("--board-size", String(size));
+  boardEl.setAttribute("aria-label", `${size} by ${size} battle board`);
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
       const cell = document.createElement("button");
       cell.type = "button";
       cell.className = `cell ${(row + col) % 2 === 0 ? "light" : "dark"}`;
@@ -205,15 +310,15 @@ function renderBoard() {
       cell.dataset.col = String(col);
       cell.setAttribute("aria-label", squareName(row, col));
 
-      if (row >= PLAYER_DEPLOY_START) {
+      if (row >= playerDeployStart()) {
         cell.classList.add("player-zone");
       }
-      if (row <= ENEMY_DEPLOY_END) {
+      if (row <= enemyDeployEnd()) {
         cell.classList.add("enemy-zone");
       }
 
       const occupyingPiece = pieceAt(row, col);
-      if (state.phase === "setup" && row >= PLAYER_DEPLOY_START && !occupyingPiece && state.budget >= PIECES[state.selectedType].cost && !state.removeMode) {
+      if (state.phase === "setup" && row >= playerDeployStart() && !occupyingPiece && state.budget >= PIECES[state.selectedType].cost && !state.removeMode) {
         cell.classList.add("valid-deploy");
       }
       if (state.phase === "setup" && occupyingPiece?.side === "player") {
@@ -273,11 +378,13 @@ function renderPiece(piece) {
 }
 
 function renderStatus() {
+  const scenario = currentScenario();
   const playerCount = sidePieces("player").length;
   const enemyCount = sidePieces("enemy").length;
   budgetValueEl.textContent = String(state.budget);
   playerCountEl.textContent = String(playerCount);
   enemyCountEl.textContent = String(enemyCount);
+  scenarioSummaryEl.textContent = `${scenario.label}: ${scenario.summary}`;
 
   const stateLabels = {
     setup: "Setup",
@@ -293,6 +400,7 @@ function renderStatus() {
   stepButton.disabled = state.phase === "ended" || state.actionBusy;
   resetButton.disabled = state.actionBusy;
   removeModeButton.disabled = state.phase !== "setup";
+  scenarioSelectEl.disabled = state.actionBusy;
   removeModeButton.classList.toggle("active", state.removeMode);
 
   if (state.phase === "setup") {
@@ -334,7 +442,7 @@ function handleCellClick(row, col) {
 
 function placePlayerPiece(row, col) {
   const template = PIECES[state.selectedType];
-  if (row < PLAYER_DEPLOY_START) {
+  if (row < playerDeployStart()) {
     addLog(`White can only deploy in the bottom 3 rows. ${squareName(row, col)} is outside the blue zone.`, "system");
     render();
     return;
@@ -793,7 +901,7 @@ function isOpen(row, col) {
 }
 
 function inBounds(row, col) {
-  return row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE;
+  return row >= 0 && row < boardSize() && col >= 0 && col < boardSize();
 }
 
 function pieceAt(row, col, ignoreIds = new Set()) {
@@ -960,7 +1068,7 @@ function checkEndState() {
 }
 
 function squareName(row, col) {
-  return `${FILES[col]}${BOARD_SIZE - row}`;
+  return `${FILES[col]}${boardSize() - row}`;
 }
 
 function sideName(side) {
@@ -979,6 +1087,10 @@ startButton.addEventListener("click", startBattle);
 pauseButton.addEventListener("click", togglePause);
 stepButton.addEventListener("click", stepOneAction);
 resetButton.addEventListener("click", resetState);
+scenarioSelectEl.addEventListener("change", () => {
+  state.scenarioId = scenarioSelectEl.value;
+  resetState();
+});
 removeModeButton.addEventListener("click", () => {
   if (state.phase !== "setup") {
     return;

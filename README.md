@@ -13,6 +13,11 @@ v0 scope:
 - No backend required unless useful.
 - Readable 2D board.
 - Piece placement.
+- Scenario selection.
 - Start/pause/step battle loop.
 - Initiative system.
 - Basic piece AI.
+
+Scenarios:
+- Variety Skirmish: 10x10 board, 50 player budget, 8 pawns, 4 knights, 2 bishops, 1 rook, and 1 queen.
+- Pawn/Knight Swarm: 12x12 board, 55 player budget, 20 pawns and 10 knights.
