@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chess Battle Sim v0</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1>Chess Battle Sim v0</h1>
+          <p>Buy a small white army, deploy in the blue zone, then watch the initiative battle resolve.</p>
+        </div>
+        <div class="status-card" aria-live="polite">
+          <span class="status-label">Battle</span>
+          <strong id="battleState">Setup</strong>
+        </div>
+      </header>
+
+      <section class="game-layout" aria-label="Chess Battle Sim">
+        <aside class="panel setup-panel">
+          <div class="panel-header">
+            <h2>Army</h2>
+            <div class="budget-pill"><span>Budget</span><strong id="budgetValue">35</strong></div>
+          </div>
+
+          <div class="piece-shop" id="pieceShop" aria-label="Piece shop"></div>
+
+          <div class="placement-tools">
+            <button id="removeModeButton" type="button" class="tool-button">Remove mode</button>
+            <p id="placementHint">Select a piece, then click a blue square. Right-click your pieces to refund.</p>
+          </div>
+
+          <div class="army-summary" aria-label="Army counts">
+            <div>
+              <span>White</span>
+              <strong id="playerCount">0</strong>
+            </div>
+            <div>
+              <span>Black</span>
+              <strong id="enemyCount">30</strong>
+            </div>
+          </div>
+        </aside>
+
+        <section class="battlefield-panel">
+          <div class="battle-toolbar">
+            <button id="startButton" type="button">Start battle</button>
+            <button id="pauseButton" type="button">Pause</button>
+            <button id="stepButton" type="button">Step action</button>
+            <button id="resetButton" type="button">Reset</button>
+            <label class="speed-control" for="speedSelect">
+              <span>Speed</span>
+              <select id="speedSelect">
+                <option value="slow">Slow</option>
+                <option value="normal" selected>Normal</option>
+                <option value="fast">Fast</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="board-shell">
+            <div id="board" class="board" aria-label="12 by 12 battle board"></div>
+            <div id="effectLayer" class="effect-layer" aria-hidden="true"></div>
+          </div>
+
+          <div class="board-legend" aria-label="Board legend">
+            <span><i class="legend-swatch player"></i> White deployment</span>
+            <span><i class="legend-swatch enemy"></i> Black army</span>
+            <span><i class="legend-swatch active"></i> Active unit</span>
+          </div>
+        </section>
+
+        <aside class="panel log-panel">
+          <div class="panel-header">
+            <h2>Battle Log</h2>
+            <button id="clearLogButton" type="button" class="tool-button">Clear</button>
+          </div>
+          <div id="actionLog" class="action-log" aria-live="polite" aria-label="Battle action log"></div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>
