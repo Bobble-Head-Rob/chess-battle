@@ -28,7 +28,7 @@ Knight:
 - Each tick adds speed to initiative.
 - At 10 initiative, a piece acts.
 - After acting, subtract 10 initiative.
-- White wins ties.
+- Player wins ties.
 - Guard/hold can cost less initiative later.
 
 Starter speeds:

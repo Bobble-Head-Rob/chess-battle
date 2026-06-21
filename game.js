@@ -146,6 +146,8 @@ const battleStateEl = document.getElementById("battleState");
 const budgetValueEl = document.getElementById("budgetValue");
 const playerCountEl = document.getElementById("playerCount");
 const enemyCountEl = document.getElementById("enemyCount");
+const playerCompositionEl = document.getElementById("playerComposition");
+const enemyCompositionEl = document.getElementById("enemyComposition");
 const placementHintEl = document.getElementById("placementHint");
 const scenarioSelectEl = document.getElementById("scenarioSelect");
 const scenarioSummaryEl = document.getElementById("scenarioSummary");
@@ -225,7 +227,7 @@ function resetState() {
   state.ticks = 0;
   state.log = [];
   placeEnemyArmy();
-  addLog(`Scenario ready: ${scenario.label}. Black deploys ${enemySummary(scenario)}. White has ${scenario.budget} points to spend.`, "system");
+  addLog(`Scenario ready: ${scenario.label}. Enemy deploys ${enemySummary(scenario)}. Player has ${scenario.budget} points to spend.`, "system");
   render();
 }
 
@@ -391,8 +393,10 @@ function renderStatus() {
   const playerCount = sidePieces("player").length;
   const enemyCount = sidePieces("enemy").length;
   budgetValueEl.textContent = String(state.budget);
-  playerCountEl.textContent = String(playerCount);
-  enemyCountEl.textContent = String(enemyCount);
+  playerCountEl.textContent = `${playerCount} total`;
+  enemyCountEl.textContent = `${enemyCount} total`;
+  playerCompositionEl.textContent = armyComposition("player");
+  enemyCompositionEl.textContent = armyComposition("enemy");
   scenarioSummaryEl.textContent = `${scenario.label}: ${scenario.summary}`;
 
   const stateLabels = {
@@ -415,8 +419,8 @@ function renderStatus() {
   if (state.phase === "setup") {
     const selected = PIECES[state.selectedType];
     placementHintEl.textContent = state.removeMode
-      ? "Remove mode is active. Click a white piece to refund it."
-      : `Selected ${selected.label}. Click a blue square to place it for ${selected.cost}. Right-click white pieces to refund.`;
+      ? "Remove mode is active. Click a player piece to refund it."
+      : `Selected ${selected.label}. Click a blue square to place it for ${selected.cost}. Right-click player pieces to refund.`;
   } else {
     placementHintEl.textContent = "Deployment is locked until reset.";
   }
@@ -452,7 +456,7 @@ function handleCellClick(row, col) {
 function placePlayerPiece(row, col) {
   const template = PIECES[state.selectedType];
   if (row < playerDeployStart()) {
-    addLog(`White can only deploy in the bottom 3 rows. ${squareName(row, col)} is outside the blue zone.`, "system");
+    addLog(`Player can only deploy in the bottom 3 rows. ${squareName(row, col)} is outside the blue zone.`, "system");
     render();
     return;
   }
@@ -462,14 +466,14 @@ function placePlayerPiece(row, col) {
     return;
   }
   if (state.budget < template.cost) {
-    addLog(`Not enough budget for a White ${template.label}.`, "system");
+    addLog(`Not enough budget for a Player ${template.label}.`, "system");
     render();
     return;
   }
   state.budget -= template.cost;
   const piece = createPiece("player", state.selectedType, row, col);
   state.pieces.push(piece);
-  addLog(`White ${template.label} deployed on ${squareName(row, col)} for ${template.cost}.`, "system");
+  addLog(`Player ${template.label} deployed on ${squareName(row, col)} for ${template.cost}.`, "system");
   render();
 }
 
@@ -483,7 +487,7 @@ function removePlayerPiece(row, col) {
   }
   state.pieces = state.pieces.filter((item) => item.id !== piece.id);
   state.budget += PIECES[piece.type].cost;
-  addLog(`White ${PIECES[piece.type].label} removed from ${squareName(row, col)}. Refunded ${PIECES[piece.type].cost}.`, "system");
+  addLog(`Player ${PIECES[piece.type].label} removed from ${squareName(row, col)}. Refunded ${PIECES[piece.type].cost}.`, "system");
   render();
 }
 
@@ -548,7 +552,7 @@ function ensurePlayerArmy() {
   if (sidePieces("player").length > 0) {
     return true;
   }
-  addLog("Place at least one white piece before starting battle.", "system");
+  addLog("Place at least one player piece before starting battle.", "system");
   render();
   return false;
 }
@@ -1080,6 +1084,21 @@ function sidePieces(side) {
   return state.pieces.filter((piece) => piece.side === side && piece.hp > 0);
 }
 
+function armyComposition(side) {
+  const pieces = sidePieces(side);
+  if (pieces.length === 0) {
+    return side === "player" && state.phase === "setup" ? "No units deployed" : "No units remaining";
+  }
+  const counts = pieces.reduce((summary, piece) => {
+    summary[piece.type] = (summary[piece.type] || 0) + 1;
+    return summary;
+  }, {});
+  return Object.keys(PIECES)
+    .filter((type) => counts[type])
+    .map((type) => `${PIECES[type].label} x${counts[type]}`)
+    .join(", ");
+}
+
 function opponentSide(side) {
   return side === "player" ? "enemy" : "player";
 }
@@ -1224,10 +1243,10 @@ function checkEndState() {
   state.destination = null;
   if (playerCount > 0 && enemyCount === 0) {
     state.result = "victory";
-    addLog("Victory! White army wins the battle.", "victory");
+    addLog("Victory! Player army wins the battle.", "victory");
   } else if (enemyCount > 0 && playerCount === 0) {
     state.result = "defeat";
-    addLog("Defeat. Black army wins the battle.", "defeat");
+    addLog("Defeat. Enemy army wins the battle.", "defeat");
   } else {
     state.result = "draw";
     addLog("Draw. No pieces remain.", "system");
@@ -1240,7 +1259,7 @@ function squareName(row, col) {
 }
 
 function sideName(side) {
-  return side === "player" ? "White" : "Black";
+  return side === "player" ? "Player" : "Enemy";
 }
 
 function pieceName(piece) {

@@ -14,7 +14,7 @@
           <div class="brand-copy">
             <h1>Greg&rsquo;s Totally Inaccurate Chess Simulator</h1>
             <p class="honor-subtitle">A chess battle sim in Greg&rsquo;s honor</p>
-            <p>Buy a small white army, deploy in the blue zone, then watch the initiative battle resolve.</p>
+            <p>Buy a small player army, deploy in the blue zone, then watch the initiative battle resolve.</p>
           </div>
         </div>
         <div class="status-card" aria-live="polite">
@@ -43,14 +43,16 @@
             <p id="placementHint">Select a piece, then click a blue square. Right-click your pieces to refund.</p>
           </div>
 
-          <div class="army-summary" aria-label="Army counts">
+          <div class="army-summary" aria-label="Army composition">
             <div>
-              <span>White</span>
-              <strong id="playerCount">0</strong>
+              <span>Player</span>
+              <strong id="playerCount">0 total</strong>
+              <p id="playerComposition">No units deployed</p>
             </div>
             <div>
-              <span>Black</span>
-              <strong id="enemyCount">16</strong>
+              <span>Enemy</span>
+              <strong id="enemyCount">16 total</strong>
+              <p id="enemyComposition">Pawn x8, Knight x4, Bishop x2, Rook x1, Queen x1</p>
             </div>
           </div>
         </aside>
@@ -77,8 +79,8 @@
           </div>
 
           <div class="board-legend" aria-label="Board legend">
-            <span><i class="legend-swatch player"></i> White deployment</span>
-            <span><i class="legend-swatch enemy"></i> Black army</span>
+            <span><i class="legend-swatch player"></i> Player deployment</span>
+            <span><i class="legend-swatch enemy"></i> Enemy army</span>
             <span><i class="legend-swatch active"></i> Active unit</span>
           </div>
         </section>

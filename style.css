@@ -302,6 +302,10 @@ select:disabled {
 }
 
 .army-summary {
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 12px;
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
@@ -309,7 +313,11 @@ select:disabled {
 
 .army-summary div {
   display: grid;
-  gap: 2px;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .army-summary span {
@@ -318,7 +326,15 @@ select:disabled {
 }
 
 .army-summary strong {
-  font-size: 1.4rem;
+  font-size: 1.05rem;
+}
+
+.army-summary p {
+  min-height: 2.5em;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.28;
 }
 
 .battle-toolbar {
@@ -436,8 +452,8 @@ select:disabled {
   position: absolute;
   top: 2px;
   left: 3px;
-  color: rgba(24, 33, 47, 0.58);
-  font-size: clamp(0.43rem, 0.7vw, 0.62rem);
+  color: rgba(24, 33, 47, 0.4);
+  font-size: clamp(0.38rem, 0.62vw, 0.54rem);
   font-weight: 800;
   line-height: 1;
   pointer-events: none;
