@@ -6,7 +6,7 @@ const SCENARIOS = {
     label: "Variety Skirmish",
     boardSize: 10,
     budget: 50,
-    summary: "10x10 board, 50 budget, 8 pawns, 4 knights, 2 bishops, 1 rook, 1 queen.",
+    summary: "10x10 board · 50 budget",
     enemies: [
       { type: "bishop", row: 0, col: 2 },
       { type: "queen", row: 0, col: 4 },
@@ -30,7 +30,7 @@ const SCENARIOS = {
     label: "Pawn/Knight Swarm",
     boardSize: 12,
     budget: 55,
-    summary: "12x12 board, 55 budget, 20 pawns and 10 knights.",
+    summary: "12x12 board · 55 budget",
     enemies: [
       { type: "knight", row: 0, col: 1 },
       { type: "knight", row: 0, col: 2 },
@@ -175,7 +175,6 @@ const startButton = document.getElementById("startButton");
 const pauseButton = document.getElementById("pauseButton");
 const stepButton = document.getElementById("stepButton");
 const resetButton = document.getElementById("resetButton");
-const removeModeButton = document.getElementById("removeModeButton");
 const speedSelect = document.getElementById("speedSelect");
 const clearLogButton = document.getElementById("clearLogButton");
 
@@ -184,7 +183,6 @@ const state = {
   scenarioId: "variety",
   budget: 0,
   selectedType: "pawn",
-  removeMode: false,
   phase: "setup",
   result: null,
   speed: "normal",
@@ -244,7 +242,6 @@ function resetState() {
   state.pieces = [];
   state.budget = scenario.budget;
   state.selectedType = "pawn";
-  state.removeMode = false;
   state.phase = "setup";
   state.result = null;
   state.activeId = null;
@@ -335,7 +332,6 @@ function renderShop() {
     button.append(symbol, label, cost);
     button.addEventListener("click", () => {
       state.selectedType = type;
-      state.removeMode = false;
       state.inspectedId = null;
       state.previewPlacementSquare = null;
       render();
@@ -413,10 +409,8 @@ function renderBoard() {
       if (occupyingPiece) {
         cell.dataset.pieceId = String(occupyingPiece.id);
         cell.appendChild(renderPiece(occupyingPiece));
-        if (!(state.phase === "setup" && state.removeMode)) {
-          cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id));
-          cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id));
-        }
+        cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id));
+        cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id));
       }
 
       if (validPlacementPreview) {
@@ -472,7 +466,7 @@ function renderStatus() {
   enemyCountEl.textContent = `${enemyCount} total`;
   playerCompositionEl.textContent = armyComposition("player");
   enemyCompositionEl.textContent = armyComposition("enemy");
-  scenarioSummaryEl.textContent = `${scenario.label}: ${scenario.summary}`;
+  scenarioSummaryEl.textContent = scenario.summary;
 
   const stateLabels = {
     setup: "Setup",
@@ -487,15 +481,11 @@ function renderStatus() {
   pauseButton.textContent = state.phase === "paused" ? "Resume" : "Pause";
   stepButton.disabled = state.phase === "ended" || state.actionBusy;
   resetButton.disabled = state.actionBusy;
-  removeModeButton.disabled = state.phase !== "setup";
   scenarioSelectEl.disabled = state.actionBusy;
-  removeModeButton.classList.toggle("active", state.removeMode);
 
   if (state.phase === "setup") {
     const selected = PIECES[state.selectedType];
-    placementHintEl.textContent = state.removeMode
-      ? "Remove mode is active. Click a player piece to refund it."
-      : `Selected ${selected.label}. Click a blue square to place it for ${selected.cost}. Right-click player pieces to refund.`;
+    placementHintEl.textContent = `Selected ${selected.label}. Click a blue square to place it for ${selected.cost}. Right-click player pieces to refund.`;
   } else {
     placementHintEl.textContent = "Deployment is locked until reset.";
   }
@@ -515,11 +505,6 @@ function renderOverlayControls() {
 function renderInspectPanel() {
   const piece = inspectedPiece();
   inspectDetailsEl.innerHTML = "";
-
-  if (state.phase === "setup" && state.removeMode) {
-    renderRemoveModeInspect();
-    return;
-  }
 
   if (placementPreviewPiece()) {
     state.inspectedId = null;
@@ -625,25 +610,6 @@ function renderPlacementInspect() {
   inspectDetailsEl.append(title, stats, role, hint);
 }
 
-function renderRemoveModeInspect() {
-  inspectHintEl.hidden = true;
-  inspectDetailsEl.hidden = false;
-
-  const title = document.createElement("div");
-  title.className = "inspect-title remove";
-  const symbol = document.createElement("span");
-  symbol.className = "inspect-symbol";
-  symbol.textContent = "×";
-  const name = document.createElement("span");
-  name.textContent = "Remove Mode";
-  title.append(symbol, name);
-
-  const help = document.createElement("p");
-  help.className = "inspect-role";
-  help.textContent = "Click a placed player piece to remove it and refund its cost. Right-click also removes player pieces during setup.";
-  inspectDetailsEl.append(title, help);
-}
-
 function inspectPiece(pieceId, refreshBoard = true) {
   const alreadyInspected = state.inspectedId === pieceId;
   state.previewPlacementSquare = null;
@@ -687,7 +653,6 @@ function clearPlacementPreview(row, col) {
 function canPreviewPlacement(row, col) {
   return (
     state.phase === "setup" &&
-    !state.removeMode &&
     inBounds(row, col) &&
     row >= playerDeployStart() &&
     !pieceAt(row, col) &&
@@ -723,9 +688,6 @@ function inspectedPiece() {
 }
 
 function activeBoardInspection() {
-  if (state.phase === "setup" && state.removeMode) {
-    return null;
-  }
   if (placementPreviewPiece()) {
     return null;
   }
@@ -733,9 +695,6 @@ function activeBoardInspection() {
 }
 
 function activeOverlayPiece() {
-  if (state.phase === "setup" && state.removeMode) {
-    return null;
-  }
   return placementPreviewPiece() || inspectedPiece();
 }
 
@@ -865,18 +824,10 @@ function renderLog() {
 function handleCellClick(row, col) {
   const occupyingPiece = pieceAt(row, col);
   if (occupyingPiece) {
-    if (state.phase === "setup" && state.removeMode) {
-      removePlayerPiece(row, col);
-      return;
-    }
     inspectPiece(occupyingPiece.id);
     return;
   }
   if (state.phase !== "setup") {
-    return;
-  }
-  if (state.removeMode) {
-    removePlayerPiece(row, col);
     return;
   }
   placePlayerPiece(row, col);
@@ -1860,15 +1811,6 @@ scoreboardResetButton.addEventListener("click", resetState);
 scenarioSelectEl.addEventListener("change", () => {
   state.scenarioId = scenarioSelectEl.value;
   resetState();
-});
-removeModeButton.addEventListener("click", () => {
-  if (state.phase !== "setup") {
-    return;
-  }
-  state.removeMode = !state.removeMode;
-  state.inspectedId = null;
-  state.previewPlacementSquare = null;
-  render();
 });
 speedSelect.addEventListener("change", () => {
   state.speed = speedSelect.value;
