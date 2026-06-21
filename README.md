@@ -1,4 +1,4 @@
-# Chess Battle Sim
+# Greg’s Totally Inaccurate Chess Simulator
 
 A browser-based chess-piece auto-battler inspired by Totally Accurate Battle Simulator.
 

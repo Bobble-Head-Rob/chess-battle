@@ -1,4 +1,4 @@
-# Chess Battle Sim Design
+# Greg’s Totally Inaccurate Chess Simulator Design
 
 ## v0 Combat Rules
 
