@@ -807,6 +807,24 @@ select:disabled {
   box-shadow: 0 0 0 2px rgba(255, 244, 220, 0.5);
 }
 
+.placement-ghost {
+  width: 78%;
+  height: 78%;
+  min-width: 28px;
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed rgba(31, 120, 209, 0.75);
+  border-radius: 50%;
+  background: rgba(217, 236, 255, 0.58);
+  color: rgba(12, 77, 136, 0.78);
+  font-size: clamp(1.05rem, 2.3vw, 2.05rem);
+  line-height: 1;
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+}
+
 .piece {
   width: 78%;
   height: 78%;

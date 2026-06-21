@@ -190,6 +190,7 @@ const state = {
   speed: "normal",
   activeId: null,
   inspectedId: null,
+  previewPlacementSquare: null,
   overlays: {
     moves: true,
     attacks: true,
@@ -248,6 +249,7 @@ function resetState() {
   state.result = null;
   state.activeId = null;
   state.inspectedId = null;
+  state.previewPlacementSquare = null;
   state.destination = null;
   state.actionBusy = false;
   state.loopRunning = false;
@@ -335,6 +337,7 @@ function renderShop() {
       state.selectedType = type;
       state.removeMode = false;
       state.inspectedId = null;
+      state.previewPlacementSquare = null;
       render();
     });
     pieceShopEl.appendChild(button);
@@ -345,6 +348,7 @@ function renderBoard() {
   const size = boardSize();
   const boardOverlays = buildBoardOverlays();
   const inspectedForBoard = activeBoardInspection();
+  const previewPiece = placementPreviewPiece();
   boardEl.innerHTML = "";
   boardEl.style.setProperty("--board-size", String(size));
   boardEl.setAttribute("aria-label", `${size} by ${size} battle board`);
@@ -365,11 +369,15 @@ function renderBoard() {
       }
 
       const occupyingPiece = pieceAt(row, col);
-      if (state.phase === "setup" && row >= playerDeployStart() && !occupyingPiece && state.budget >= PIECES[state.selectedType].cost && !state.removeMode) {
+      const validPlacementPreview = canPreviewPlacement(row, col);
+      if (validPlacementPreview) {
         cell.classList.add("valid-deploy");
       }
       if (state.phase === "setup" && occupyingPiece?.side === "player") {
         cell.classList.add("remove-ready");
+      }
+      if (previewPiece && previewPiece.row === row && previewPiece.col === col) {
+        cell.classList.add("placement-preview");
       }
       if (state.activeId && occupyingPiece?.id === state.activeId) {
         cell.classList.add("active-unit");
@@ -394,11 +402,28 @@ function renderBoard() {
         cell.appendChild(marker);
       });
 
+      if (previewPiece && previewPiece.row === row && previewPiece.col === col) {
+        const ghost = document.createElement("span");
+        ghost.className = "placement-ghost";
+        ghost.setAttribute("aria-hidden", "true");
+        ghost.textContent = PIECES[previewPiece.type].symbols.player;
+        cell.appendChild(ghost);
+      }
+
       if (occupyingPiece) {
         cell.dataset.pieceId = String(occupyingPiece.id);
         cell.appendChild(renderPiece(occupyingPiece));
-        cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id));
-        cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id));
+        if (!(state.phase === "setup" && state.removeMode)) {
+          cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id));
+          cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id));
+        }
+      }
+
+      if (validPlacementPreview) {
+        cell.addEventListener("mouseenter", () => setPlacementPreview(row, col));
+        cell.addEventListener("focus", () => setPlacementPreview(row, col));
+        cell.addEventListener("mouseleave", () => clearPlacementPreview(row, col));
+        cell.addEventListener("blur", () => clearPlacementPreview(row, col));
       }
 
       cell.addEventListener("click", () => handleCellClick(row, col));
@@ -477,7 +502,7 @@ function renderStatus() {
 }
 
 function renderOverlayControls() {
-  const hasSelection = Boolean(activeBoardInspection());
+  const hasSelection = Boolean(activeOverlayPiece());
   overlayMovesEl.checked = state.overlays.moves;
   overlayAttacksEl.checked = state.overlays.attacks;
   overlayThreatEl.checked = state.overlays.threat;
@@ -493,6 +518,12 @@ function renderInspectPanel() {
 
   if (state.phase === "setup" && state.removeMode) {
     renderRemoveModeInspect();
+    return;
+  }
+
+  if (placementPreviewPiece()) {
+    state.inspectedId = null;
+    renderPlacementInspect();
     return;
   }
 
@@ -615,6 +646,7 @@ function renderRemoveModeInspect() {
 
 function inspectPiece(pieceId, refreshBoard = true) {
   const alreadyInspected = state.inspectedId === pieceId;
+  state.previewPlacementSquare = null;
   state.inspectedId = pieceId;
   renderOverlayControls();
   renderInspectPanel();
@@ -632,6 +664,60 @@ function markInspectedCell() {
   });
 }
 
+function setPlacementPreview(row, col) {
+  if (!canPreviewPlacement(row, col)) {
+    return;
+  }
+  if (state.previewPlacementSquare?.row === row && state.previewPlacementSquare?.col === col && !state.inspectedId) {
+    return;
+  }
+  state.previewPlacementSquare = { row, col };
+  state.inspectedId = null;
+  render();
+}
+
+function clearPlacementPreview(row, col) {
+  if (!state.previewPlacementSquare || state.previewPlacementSquare.row !== row || state.previewPlacementSquare.col !== col) {
+    return;
+  }
+  state.previewPlacementSquare = null;
+  render();
+}
+
+function canPreviewPlacement(row, col) {
+  return (
+    state.phase === "setup" &&
+    !state.removeMode &&
+    inBounds(row, col) &&
+    row >= playerDeployStart() &&
+    !pieceAt(row, col) &&
+    state.budget >= PIECES[state.selectedType].cost
+  );
+}
+
+function placementPreviewPiece() {
+  if (!state.previewPlacementSquare || !canPreviewPlacement(state.previewPlacementSquare.row, state.previewPlacementSquare.col)) {
+    return null;
+  }
+  return createVirtualPiece("player", state.selectedType, state.previewPlacementSquare.row, state.previewPlacementSquare.col);
+}
+
+function createVirtualPiece(side, type, row, col) {
+  const template = PIECES[type];
+  return {
+    id: "placement-preview",
+    side,
+    type,
+    row,
+    col,
+    hp: template.hp,
+    maxHp: template.hp,
+    damage: template.damage,
+    speed: template.speed,
+    initiative: 0,
+  };
+}
+
 function inspectedPiece() {
   return state.inspectedId ? state.pieces.find((item) => item.id === state.inspectedId) || null : null;
 }
@@ -640,12 +726,22 @@ function activeBoardInspection() {
   if (state.phase === "setup" && state.removeMode) {
     return null;
   }
+  if (placementPreviewPiece()) {
+    return null;
+  }
   return inspectedPiece();
+}
+
+function activeOverlayPiece() {
+  if (state.phase === "setup" && state.removeMode) {
+    return null;
+  }
+  return placementPreviewPiece() || inspectedPiece();
 }
 
 function buildBoardOverlays() {
   const overlays = new Map();
-  const piece = activeBoardInspection();
+  const piece = activeOverlayPiece();
   if (!piece) {
     return overlays;
   }
@@ -654,7 +750,7 @@ function buildBoardOverlays() {
     addCoverageOverlays(overlays, buildCoverageMap(opponentSide(piece.side)), "threat");
   }
   if (state.overlays.protection) {
-    addCoverageOverlays(overlays, buildCoverageMap(piece.side), "protection");
+    addCoverageOverlays(overlays, buildCoverageMap(piece.side, new Set(), piece.id === "placement-preview" ? [piece] : []), "protection");
   }
   if (state.overlays.moves) {
     legalMoves(piece).forEach((move) => addOverlay(overlays, move.row, move.col, "move"));
@@ -806,7 +902,8 @@ function placePlayerPiece(row, col) {
   state.budget -= template.cost;
   const piece = createPiece("player", state.selectedType, row, col);
   state.pieces.push(piece);
-  state.inspectedId = piece.id;
+  state.inspectedId = null;
+  state.previewPlacementSquare = null;
   addLog(`Player ${template.label} deployed on ${squareName(row, col)} for ${template.cost}.`, "system");
   render();
 }
@@ -847,6 +944,7 @@ function startBattle() {
   if (state.phase === "setup") {
     captureScoreSnapshot();
     state.phase = "running";
+    state.previewPlacementSquare = null;
     addLog("Battle begins. Initiative ticks until the first unit reaches 10.", "system");
   } else if (state.phase === "paused") {
     state.phase = "running";
@@ -878,6 +976,7 @@ async function stepOneAction() {
   if (state.phase === "setup") {
     captureScoreSnapshot();
     state.phase = "paused";
+    state.previewPlacementSquare = null;
     addLog("Battle begins in step mode.", "system");
   } else if (state.phase === "running") {
     state.phase = "paused";
@@ -1091,7 +1190,7 @@ function buildMoveCoverage(actor) {
   };
 }
 
-function buildCoverageMap(attackingSide, ignoreIds = new Set()) {
+function buildCoverageMap(attackingSide, ignoreIds = new Set(), extraAttackers = []) {
   const size = boardSize();
   const map = Array.from({ length: size }, () =>
     Array.from({ length: size }, () => ({
@@ -1102,7 +1201,7 @@ function buildCoverageMap(attackingSide, ignoreIds = new Set()) {
     }))
   );
 
-  sidePieces(attackingSide).forEach((attacker) => {
+  sidePieces(attackingSide).concat(extraAttackers.filter((attacker) => attacker.side === attackingSide)).forEach((attacker) => {
     if (ignoreIds.has(attacker.id)) {
       return;
     }
@@ -1768,6 +1867,7 @@ removeModeButton.addEventListener("click", () => {
   }
   state.removeMode = !state.removeMode;
   state.inspectedId = null;
+  state.previewPlacementSquare = null;
   render();
 });
 speedSelect.addEventListener("change", () => {
