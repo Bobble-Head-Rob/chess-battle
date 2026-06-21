@@ -73,6 +73,21 @@
             </label>
           </div>
 
+          <section id="scoreboard" class="scoreboard" aria-live="polite" hidden>
+            <div class="scoreboard-header">
+              <div>
+                <span class="scoreboard-kicker">Battle Result</span>
+                <h2 id="scoreboardTitle">Victory</h2>
+              </div>
+              <div class="grade-badge">
+                <span>Grade</span>
+                <strong id="scoreboardGrade">A</strong>
+              </div>
+            </div>
+            <div id="scoreboardStats" class="scoreboard-stats"></div>
+            <button id="scoreboardResetButton" type="button">Reset battle</button>
+          </section>
+
           <div class="board-shell">
             <div id="board" class="board" aria-label="10 by 10 battle board"></div>
             <div id="effectLayer" class="effect-layer" aria-hidden="true"></div>

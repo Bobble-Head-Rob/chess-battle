@@ -151,6 +151,11 @@ const enemyCompositionEl = document.getElementById("enemyComposition");
 const placementHintEl = document.getElementById("placementHint");
 const scenarioSelectEl = document.getElementById("scenarioSelect");
 const scenarioSummaryEl = document.getElementById("scenarioSummary");
+const scoreboardEl = document.getElementById("scoreboard");
+const scoreboardTitleEl = document.getElementById("scoreboardTitle");
+const scoreboardGradeEl = document.getElementById("scoreboardGrade");
+const scoreboardStatsEl = document.getElementById("scoreboardStats");
+const scoreboardResetButton = document.getElementById("scoreboardResetButton");
 const startButton = document.getElementById("startButton");
 const pauseButton = document.getElementById("pauseButton");
 const stepButton = document.getElementById("stepButton");
@@ -175,6 +180,7 @@ const state = {
   nextId: 1,
   actionNumber: 0,
   ticks: 0,
+  scoreSnapshot: null,
   log: [],
 };
 
@@ -225,6 +231,7 @@ function resetState() {
   state.nextId = 1;
   state.actionNumber = 0;
   state.ticks = 0;
+  state.scoreSnapshot = null;
   state.log = [];
   placeEnemyArmy();
   addLog(`Scenario ready: ${scenario.label}. Enemy deploys ${enemySummary(scenario)}. Player has ${scenario.budget} points to spend.`, "system");
@@ -253,6 +260,7 @@ function render() {
   renderShop();
   renderBoard();
   renderStatus();
+  renderScoreboard();
   renderLog();
 }
 
@@ -508,6 +516,7 @@ function startBattle() {
     return;
   }
   if (state.phase === "setup") {
+    captureScoreSnapshot();
     state.phase = "running";
     addLog("Battle begins. Initiative ticks until the first unit reaches 10.", "system");
   } else if (state.phase === "paused") {
@@ -538,6 +547,7 @@ async function stepOneAction() {
     return;
   }
   if (state.phase === "setup") {
+    captureScoreSnapshot();
     state.phase = "paused";
     addLog("Battle begins in step mode.", "system");
   } else if (state.phase === "running") {
@@ -1084,18 +1094,159 @@ function sidePieces(side) {
 }
 
 function armyComposition(side) {
-  const pieces = sidePieces(side);
+  return compositionFromPieces(sidePieces(side), side === "player" && state.phase === "setup" ? "No units deployed" : "No units remaining");
+}
+
+function compositionFromPieces(pieces, emptyText = "None") {
   if (pieces.length === 0) {
-    return side === "player" && state.phase === "setup" ? "No units deployed" : "No units remaining";
+    return emptyText;
   }
-  const counts = pieces.reduce((summary, piece) => {
+  return compositionFromCounts(pieceCounts(pieces), emptyText);
+}
+
+function compositionFromCounts(counts, emptyText = "None") {
+  const entries = Object.keys(PIECES).filter((type) => counts[type] > 0);
+  if (entries.length === 0) {
+    return emptyText;
+  }
+  return entries.map((type) => `${PIECES[type].label} x${counts[type]}`).join(", ");
+}
+
+function pieceCounts(pieces) {
+  return pieces.reduce((summary, piece) => {
     summary[piece.type] = (summary[piece.type] || 0) + 1;
     return summary;
   }, {});
-  return Object.keys(PIECES)
-    .filter((type) => counts[type])
-    .map((type) => `${PIECES[type].label} x${counts[type]}`)
-    .join(", ");
+}
+
+function subtractCounts(startCounts, endCounts) {
+  return Object.keys(PIECES).reduce((lost, type) => {
+    lost[type] = Math.max(0, (startCounts[type] || 0) - (endCounts[type] || 0));
+    return lost;
+  }, {});
+}
+
+function countTotal(counts) {
+  return Object.values(counts).reduce((total, count) => total + count, 0);
+}
+
+function captureScoreSnapshot() {
+  if (state.scoreSnapshot) {
+    return;
+  }
+  const scenario = currentScenario();
+  const playerArmy = sidePieces("player").map(snapshotPiece);
+  const enemyArmy = sidePieces("enemy").map(snapshotPiece);
+  state.scoreSnapshot = {
+    scenarioName: scenario.label,
+    startingBudget: scenario.budget,
+    budgetRemaining: state.budget,
+    budgetSpent: scenario.budget - state.budget,
+    startActionNumber: state.actionNumber,
+    playerArmy,
+    enemyArmy,
+    playerCounts: pieceCounts(playerArmy),
+    enemyCounts: pieceCounts(enemyArmy),
+  };
+}
+
+function snapshotPiece(piece) {
+  return { type: piece.type, side: piece.side };
+}
+
+function renderScoreboard() {
+  const summary = battleSummary();
+  if (!summary) {
+    scoreboardEl.hidden = true;
+    scoreboardEl.classList.remove("victory", "defeat");
+    scoreboardStatsEl.innerHTML = "";
+    return;
+  }
+
+  scoreboardEl.hidden = false;
+  scoreboardEl.classList.toggle("victory", summary.result === "Victory");
+  scoreboardEl.classList.toggle("defeat", summary.result === "Defeat");
+  scoreboardTitleEl.textContent = summary.result;
+  scoreboardGradeEl.textContent = summary.grade;
+  scoreboardStatsEl.innerHTML = "";
+
+  [
+    ["Scenario", summary.scenarioName],
+    ["Actions / Turns", String(summary.actionsTaken)],
+    ["Starting Budget", String(summary.startingBudget)],
+    ["Budget Spent", String(summary.budgetSpent)],
+    ["Budget Remaining", String(summary.budgetRemaining)],
+    ["Starting Player Army", summary.startingPlayerComposition],
+    ["Surviving Player Army", summary.survivingPlayerComposition],
+    ["Player Pieces Lost", `${summary.playerLostCount} (${summary.playerLostComposition})`],
+    ["Enemy Pieces Destroyed", `${summary.enemyDestroyedCount} (${summary.enemyDestroyedComposition})`],
+  ].forEach(([label, value]) => {
+    const stat = document.createElement("div");
+    stat.className = "scoreboard-stat";
+    const labelEl = document.createElement("span");
+    labelEl.textContent = label;
+    const valueEl = document.createElement("strong");
+    valueEl.textContent = value;
+    stat.append(labelEl, valueEl);
+    scoreboardStatsEl.appendChild(stat);
+  });
+}
+
+function battleSummary() {
+  if (state.phase !== "ended" || !["victory", "defeat"].includes(state.result) || !state.scoreSnapshot) {
+    return null;
+  }
+  const snapshot = state.scoreSnapshot;
+  const survivingPlayer = sidePieces("player").map(snapshotPiece);
+  const survivingEnemy = sidePieces("enemy").map(snapshotPiece);
+  const playerLostCounts = subtractCounts(snapshot.playerCounts, pieceCounts(survivingPlayer));
+  const enemyDestroyedCounts = subtractCounts(snapshot.enemyCounts, pieceCounts(survivingEnemy));
+  const summary = {
+    result: state.result === "victory" ? "Victory" : "Defeat",
+    scenarioName: snapshot.scenarioName,
+    actionsTaken: state.actionNumber - snapshot.startActionNumber,
+    startingBudget: snapshot.startingBudget,
+    budgetSpent: snapshot.budgetSpent,
+    budgetRemaining: snapshot.budgetRemaining,
+    startingPlayerComposition: compositionFromPieces(snapshot.playerArmy, "No units deployed"),
+    survivingPlayerComposition: compositionFromPieces(survivingPlayer, "No units remaining"),
+    playerLostCount: countTotal(playerLostCounts),
+    playerLostComposition: compositionFromCounts(playerLostCounts, "None"),
+    enemyDestroyedCount: countTotal(enemyDestroyedCounts),
+    enemyDestroyedComposition: compositionFromCounts(enemyDestroyedCounts, "None"),
+    startingPlayerCount: snapshot.playerArmy.length,
+  };
+  summary.grade = gradeBattle(summary);
+  return summary;
+}
+
+function gradeBattle(summary) {
+  if (summary.result !== "Victory") {
+    return "F";
+  }
+
+  // Simple v0 heuristic: start from a perfect run and subtract for long battles,
+  // heavy spending, and lost pieces. Thresholds are intentionally broad so the
+  // grade reads like a post-battle flavor score instead of a strict simulation.
+  let score = 100;
+  const actionPar = 18 + summary.enemyDestroyedCount * 4 + summary.startingPlayerCount * 2;
+  const budgetRatio = summary.startingBudget > 0 ? summary.budgetSpent / summary.startingBudget : 1;
+  const lossRatio = summary.startingPlayerCount > 0 ? summary.playerLostCount / summary.startingPlayerCount : 1;
+  score -= Math.max(0, summary.actionsTaken - actionPar) * 0.7;
+  score -= budgetRatio * 18;
+  score -= lossRatio * 40;
+  if (summary.playerLostCount === 0) {
+    score += 8;
+  }
+  if (summary.budgetRemaining <= 2) {
+    score -= 6;
+  }
+
+  if (score >= 88) return "S";
+  if (score >= 74) return "A";
+  if (score >= 58) return "B";
+  if (score >= 42) return "C";
+  return "D";
 }
 
 function opponentSide(side) {
@@ -1273,6 +1424,7 @@ startButton.addEventListener("click", startBattle);
 pauseButton.addEventListener("click", togglePause);
 stepButton.addEventListener("click", stepOneAction);
 resetButton.addEventListener("click", resetState);
+scoreboardResetButton.addEventListener("click", resetState);
 scenarioSelectEl.addEventListener("change", () => {
   state.scenarioId = scenarioSelectEl.value;
   resetState();
