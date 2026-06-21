@@ -431,6 +431,13 @@ select:disabled {
   font-weight: 900;
 }
 
+.inspect-title.placement {
+  padding: 6px 8px;
+  border: 1px solid rgba(31, 120, 209, 0.22);
+  border-radius: 8px;
+  background: rgba(217, 236, 255, 0.42);
+}
+
 .inspect-symbol {
   width: 30px;
   height: 30px;
@@ -452,6 +459,13 @@ select:disabled {
   color: var(--enemy);
   border-color: rgba(217, 67, 67, 0.4);
   background: var(--enemy-soft);
+}
+
+.inspect-title.remove .inspect-symbol {
+  color: var(--enemy);
+  border-color: rgba(217, 67, 67, 0.4);
+  background: var(--enemy-soft);
+  font-weight: 900;
 }
 
 .inspect-stats {
@@ -481,6 +495,14 @@ select:disabled {
   color: #314052;
   font-size: 0.84rem;
   line-height: 1.35;
+}
+
+.inspect-hint-line {
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: #eef7ef;
+  color: var(--good);
+  font-weight: 800;
 }
 
 .army-summary {

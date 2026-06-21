@@ -334,6 +334,7 @@ function renderShop() {
     button.addEventListener("click", () => {
       state.selectedType = type;
       state.removeMode = false;
+      state.inspectedId = null;
       render();
     });
     pieceShopEl.appendChild(button);
@@ -343,6 +344,7 @@ function renderShop() {
 function renderBoard() {
   const size = boardSize();
   const boardOverlays = buildBoardOverlays();
+  const inspectedForBoard = activeBoardInspection();
   boardEl.innerHTML = "";
   boardEl.style.setProperty("--board-size", String(size));
   boardEl.setAttribute("aria-label", `${size} by ${size} battle board`);
@@ -372,7 +374,7 @@ function renderBoard() {
       if (state.activeId && occupyingPiece?.id === state.activeId) {
         cell.classList.add("active-unit");
       }
-      if (state.inspectedId && occupyingPiece?.id === state.inspectedId) {
+      if (inspectedForBoard && occupyingPiece?.id === inspectedForBoard.id) {
         cell.classList.add("inspected-unit");
       }
       if (state.destination && state.destination.row === row && state.destination.col === col) {
@@ -475,7 +477,7 @@ function renderStatus() {
 }
 
 function renderOverlayControls() {
-  const hasSelection = Boolean(inspectedPiece());
+  const hasSelection = Boolean(activeBoardInspection());
   overlayMovesEl.checked = state.overlays.moves;
   overlayAttacksEl.checked = state.overlays.attacks;
   overlayThreatEl.checked = state.overlays.threat;
@@ -487,6 +489,19 @@ function renderOverlayControls() {
 
 function renderInspectPanel() {
   const piece = inspectedPiece();
+  inspectDetailsEl.innerHTML = "";
+
+  if (state.phase === "setup" && state.removeMode) {
+    renderRemoveModeInspect();
+    return;
+  }
+
+  if (!piece && state.phase === "setup") {
+    state.inspectedId = null;
+    renderPlacementInspect();
+    return;
+  }
+
   inspectHintEl.hidden = Boolean(piece);
   inspectDetailsEl.hidden = !piece;
   inspectDetailsEl.innerHTML = "";
@@ -497,6 +512,10 @@ function renderInspectPanel() {
     return;
   }
 
+  renderBoardPieceInspect(piece);
+}
+
+function renderBoardPieceInspect(piece) {
   const template = PIECES[piece.type];
   const title = document.createElement("div");
   title.className = `inspect-title ${piece.side}`;
@@ -533,6 +552,67 @@ function renderInspectPanel() {
   inspectDetailsEl.append(title, stats, role);
 }
 
+function renderPlacementInspect() {
+  const template = PIECES[state.selectedType];
+  inspectHintEl.hidden = true;
+  inspectDetailsEl.hidden = false;
+
+  const title = document.createElement("div");
+  title.className = "inspect-title player placement";
+  const symbol = document.createElement("span");
+  symbol.className = "inspect-symbol";
+  symbol.textContent = template.symbols.player;
+  const name = document.createElement("span");
+  name.textContent = `Placing: ${template.label}`;
+  title.append(symbol, name);
+
+  const stats = document.createElement("div");
+  stats.className = "inspect-stats";
+  [
+    ["Team", "Player"],
+    ["Cost", String(template.cost)],
+    ["HP", String(template.hp)],
+    ["Damage", String(template.damage)],
+    ["Speed", String(template.speed)],
+  ].forEach(([label, value]) => {
+    const item = document.createElement("div");
+    const labelEl = document.createElement("span");
+    labelEl.textContent = label;
+    const valueEl = document.createElement("strong");
+    valueEl.textContent = value;
+    item.append(labelEl, valueEl);
+    stats.appendChild(item);
+  });
+
+  const role = document.createElement("p");
+  role.className = "inspect-role";
+  role.textContent = PIECE_ROLES[state.selectedType];
+
+  const hint = document.createElement("p");
+  hint.className = "inspect-hint-line";
+  hint.textContent = "Click a blue deployment square to place.";
+  inspectDetailsEl.append(title, stats, role, hint);
+}
+
+function renderRemoveModeInspect() {
+  inspectHintEl.hidden = true;
+  inspectDetailsEl.hidden = false;
+
+  const title = document.createElement("div");
+  title.className = "inspect-title remove";
+  const symbol = document.createElement("span");
+  symbol.className = "inspect-symbol";
+  symbol.textContent = "×";
+  const name = document.createElement("span");
+  name.textContent = "Remove Mode";
+  title.append(symbol, name);
+
+  const help = document.createElement("p");
+  help.className = "inspect-role";
+  help.textContent = "Click a placed player piece to remove it and refund its cost. Right-click also removes player pieces during setup.";
+  inspectDetailsEl.append(title, help);
+}
+
 function inspectPiece(pieceId, refreshBoard = true) {
   const alreadyInspected = state.inspectedId === pieceId;
   state.inspectedId = pieceId;
@@ -546,8 +626,9 @@ function inspectPiece(pieceId, refreshBoard = true) {
 }
 
 function markInspectedCell() {
+  const inspectedForBoard = activeBoardInspection();
   Array.from(boardEl.children).forEach((cell) => {
-    cell.classList.toggle("inspected-unit", Number(cell.dataset.pieceId) === state.inspectedId);
+    cell.classList.toggle("inspected-unit", Boolean(inspectedForBoard) && Number(cell.dataset.pieceId) === inspectedForBoard.id);
   });
 }
 
@@ -555,9 +636,16 @@ function inspectedPiece() {
   return state.inspectedId ? state.pieces.find((item) => item.id === state.inspectedId) || null : null;
 }
 
+function activeBoardInspection() {
+  if (state.phase === "setup" && state.removeMode) {
+    return null;
+  }
+  return inspectedPiece();
+}
+
 function buildBoardOverlays() {
   const overlays = new Map();
-  const piece = inspectedPiece();
+  const piece = activeBoardInspection();
   if (!piece) {
     return overlays;
   }
@@ -1679,6 +1767,7 @@ removeModeButton.addEventListener("click", () => {
     return;
   }
   state.removeMode = !state.removeMode;
+  state.inspectedId = null;
   render();
 });
 speedSelect.addEventListener("change", () => {
