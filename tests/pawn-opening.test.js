@@ -477,6 +477,63 @@ test("bishop prefers a move creating diagonal attack potential", () => {
   assert.equal(move.col, 2);
 });
 
+test("bishop attacks a clean visible diagonal target instead of moving", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const bishop = addPiece(game, "player", "bishop", 8, 1);
+  const target = addPiece(game, "enemy", "rook", 5, 4);
+
+  const action = game.decideAction(bishop);
+
+  assert.equal(action.kind, "attack");
+  assert.equal(action.target, target);
+});
+
+test("bishop holds a useful safe diagonal instead of shuffling", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const bishop = addPiece(game, "player", "bishop", 5, 4);
+  bishop.previousRow = 6;
+  bishop.previousCol = 3;
+
+  assert.equal(game.chooseMove(bishop), null);
+});
+
+test("bishop avoids pawn diagonal threat when safe diagonal options exist", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const bishop = addPiece(game, "player", "bishop", 8, 4);
+  const pawn = addPiece(game, "enemy", "pawn", 5, 1);
+  addPiece(game, "enemy", "rook", 4, 4);
+
+  const move = game.chooseMove(bishop);
+
+  assert.notEqual(move, null);
+  assert.equal(game.canAttackFrom(pawn, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
+});
+
+test("bishop avoids knight attack range when safe diagonal options exist", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const bishop = addPiece(game, "player", "bishop", 8, 4);
+  const knight = addPiece(game, "enemy", "knight", 4, 3);
+  addPiece(game, "enemy", "rook", 4, 4);
+
+  const move = game.chooseMove(bishop);
+
+  assert.notEqual(move, null);
+  assert.equal(game.canAttackFrom(knight, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
+});
+
+test("blocked terrain stops bishop diagonal line of sight", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+  const bishop = addPiece(game, "player", "bishop", 6, 1);
+  const target = addPiece(game, "enemy", "rook", 2, 5);
+
+  assert.equal(game.canAttack(bishop, target), false);
+});
+
 test("rook prefers a move creating straight-line attack potential", () => {
   const game = loadGame();
   emptyBoard(game);

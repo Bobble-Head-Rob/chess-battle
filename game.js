@@ -1233,6 +1233,7 @@ function chooseMove(actor) {
   const currentLaneScore = scoreLanePotential(actor, actor.row, actor.col, targets);
   const currentFutureAttack = scoreFutureAttackPotential(actor, actor.row, actor.col, targets);
   const currentRookAnchorScore = actor.type === "rook" ? scoreRookAnchor(actor, currentSafety, currentLaneScore, currentFutureAttack) : 0;
+  const currentBishopAnchorScore = actor.type === "bishop" ? scoreBishopAnchor(actor, currentSafety, currentLaneScore, currentFutureAttack) : 0;
   const legalMoveCount = moves.length;
 
   moves.forEach((move) => {
@@ -1262,7 +1263,7 @@ function chooseMove(actor) {
     // future attack potential and safety to avoid becoming passive.
     const laneScore = scoreLanePotential(actor, move.row, move.col, targets);
     moveScore += laneScore;
-    if (laneScore > 0 && safety.danger.attackers === 0 && (actor.type !== "rook" || isRookLaneImprovement(laneScore, currentLaneScore, futureAttack))) {
+    if (laneScore > 0 && safety.danger.attackers === 0 && isUsefulLaneMove(actor, laneScore, currentLaneScore, futureAttack)) {
       useful = true;
       if (!futureAttack.hasAttack && PIECES[actor.type].role === "ranged") {
         moveReason = "opening a firing line";
@@ -1271,6 +1272,7 @@ function chooseMove(actor) {
 
     moveScore += scoreTeamworkAndBlocking(actor, move.row, move.col, safety);
     moveScore += scoreRookLaneDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore);
+    moveScore += scoreBishopDiagonalDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore);
 
     let bestTargetScore = -Infinity;
     targets.forEach((target) => {
@@ -1280,7 +1282,7 @@ function chooseMove(actor) {
 
       if (toDistance < fromDistance) {
         score += (fromDistance - toDistance) * 16;
-        if (actor.type !== "rook") {
+        if (actor.type !== "rook" && actor.type !== "bishop") {
           useful = true;
         }
       }
@@ -1325,6 +1327,9 @@ function chooseMove(actor) {
   });
 
   if (actor.type === "rook" && shouldRookHoldLane(currentSafety, currentRookAnchorScore, bestScore)) {
+    return null;
+  }
+  if (actor.type === "bishop" && shouldBishopHoldDiagonal(currentSafety, currentBishopAnchorScore, bestScore)) {
     return null;
   }
 
@@ -1409,17 +1414,17 @@ function scoreSquareSafety(actor, square, coverage) {
 
 function scoreMoveSafety(actor, move, coverage) {
   const safety = scoreSquareSafety(actor, move, coverage);
-  if (actor.type !== "rook") {
+  if (actor.type !== "rook" && actor.type !== "bishop") {
     return safety;
   }
 
-  // Rooks are valuable lane controllers, so pawn and knight coverage should
-  // matter more than it does for disposable front-line pieces.
-  const rookPenalty = scoreRookDangerPenalty(actor, move, safety);
+  // Rooks and bishops are valuable lane controllers, so pawn and knight
+  // coverage should matter more than it does for disposable front-line pieces.
+  const controllerPenalty = actor.type === "rook" ? scoreRookDangerPenalty(actor, move, safety) : scoreBishopDangerPenalty(actor, move, safety);
   return {
     ...safety,
-    penalty: safety.penalty + rookPenalty,
-    score: safety.score - rookPenalty,
+    penalty: safety.penalty + controllerPenalty,
+    score: safety.score - controllerPenalty,
   };
 }
 
@@ -1458,11 +1463,24 @@ function scoreLanePotential(actor, row, col, targets) {
   if (actor.type === "rook") {
     return scoreRookLanePotential(actor, row, col, targets);
   }
+  if (actor.type === "bishop") {
+    return scoreBishopDiagonalPotential(actor, row, col, targets);
+  }
 
   const openLine = openLineScore(actor, row, col) * MOVE_PROFILES[actor.type].lane * 0.75;
   const visibleTargetScore = visibleLineTargets(actor, row, col).reduce((score, target) => score + targetScore(actor, target) * 0.28, 0);
   const multiLineBonus = actor.type === "queen" ? Math.min(30, visibleLineTargets(actor, row, col).length * 10) : 0;
   return openLine + visibleTargetScore + multiLineBonus;
+}
+
+function isUsefulLaneMove(actor, laneScore, currentLaneScore, futureAttack) {
+  if (actor.type === "rook") {
+    return isRookLaneImprovement(laneScore, currentLaneScore, futureAttack);
+  }
+  if (actor.type === "bishop") {
+    return isBishopDiagonalImprovement(laneScore, currentLaneScore, futureAttack);
+  }
+  return true;
 }
 
 function scoreRookLanePotential(actor, row, col, targets) {
@@ -1536,6 +1554,81 @@ function scoreRookDangerPenalty(actor, move, safety) {
   }
   if (safety.protection.attackers > 0) {
     penalty = Math.max(0, penalty - Math.min(42, safety.protection.attackers * 14 + safety.protection.damage * 4));
+  }
+  return penalty;
+}
+
+function scoreBishopDiagonalPotential(actor, row, col, targets) {
+  const visibleTargets = visibleLineTargets(actor, row, col);
+  const openDiagonal = openLineScore(actor, row, col) * MOVE_PROFILES.bishop.lane * 0.52;
+  const visibleTargetScore = visibleTargets.reduce((score, target) => score + targetScore(actor, target) * 0.38, 0);
+  const diagonalContactBonus = visibleTargets.length > 0 ? 42 : 0;
+  return openDiagonal + visibleTargetScore + diagonalContactBonus;
+}
+
+function isBishopDiagonalImprovement(laneScore, currentLaneScore, futureAttack) {
+  return futureAttack.hasAttack || laneScore >= currentLaneScore + 10 || laneScore >= 62;
+}
+
+function scoreBishopDiagonalDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore) {
+  if (actor.type !== "bishop") {
+    return 0;
+  }
+  let score = 0;
+
+  // Bishops should act like diagonal snipers: relocate for materially better
+  // diagonals or clear shots, not just to shuffle along an equivalent lane.
+  if (!futureAttack.hasAttack && laneScore < currentLaneScore + 10) {
+    score -= 30;
+  }
+  if (safety.protection.attackers > 0) {
+    score += 12 + safety.protection.attackers * 5;
+  }
+  if (safety.danger.attackers > 0 && !futureAttack.hasAttack) {
+    score -= 38;
+  }
+  return score;
+}
+
+function scoreBishopAnchor(actor, safety, laneScore, futureAttack) {
+  if (safety.danger.attackers > 0) {
+    return -Infinity;
+  }
+  let score = laneScore + futureAttack.score;
+  if (laneScore >= 38) {
+    score += 38;
+  }
+  if (safety.protection.attackers > 0) {
+    score += 12;
+  }
+  return score;
+}
+
+function shouldBishopHoldDiagonal(currentSafety, currentBishopAnchorScore, bestMoveScore) {
+  return currentSafety.danger.attackers === 0 && currentBishopAnchorScore >= 74 && bestMoveScore < currentBishopAnchorScore + 24;
+}
+
+function scoreBishopDangerPenalty(actor, move, safety) {
+  let penalty = 0;
+  safety.danger.pieces.forEach((attacker) => {
+    if (attacker.type === "pawn") {
+      penalty += 120;
+    } else if (attacker.type === "knight") {
+      penalty += 110;
+    } else {
+      penalty += 22 + PIECES[attacker.type].cost * 4;
+    }
+  });
+  if (safety.danger.damage >= actor.hp) {
+    penalty += 118;
+  } else if (safety.danger.damage >= Math.ceil(actor.hp / 2)) {
+    penalty += 46;
+  }
+  if (isAdjacentToEnemyPawn(actor, move.row, move.col)) {
+    penalty += 34;
+  }
+  if (safety.protection.attackers > 0) {
+    penalty = Math.max(0, penalty - Math.min(36, safety.protection.attackers * 12 + safety.protection.damage * 3));
   }
   return penalty;
 }
