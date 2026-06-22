@@ -86,7 +86,8 @@ class FakeElement {
   }
 }
 
-function loadGame() {
+function loadGame(options = {}) {
+  const { stubAnimations = true, holdSleep = false } = options;
   const elements = new Map();
   const document = {
     getElementById(id) {
@@ -116,10 +117,15 @@ function loadGame() {
   };
   vm.createContext(context);
   const source = fs.readFileSync(path.join(__dirname, "..", "game.js"), "utf8");
+  const sleepStub = holdSleep
+    ? "sleep = () => new Promise((resolve) => { globalThis.__finishSleep = resolve; });"
+    : "sleep = () => Promise.resolve();";
+  const animationStub = stubAnimations
+    ? "animateMove = () => Promise.resolve();\nanimateAttack = () => Promise.resolve();"
+    : "";
   vm.runInContext(`${source}
-sleep = () => Promise.resolve();
-animateMove = () => Promise.resolve();
-animateAttack = () => Promise.resolve();
+${sleepStub}
+${animationStub}
 render = () => {};
 globalThis.__game = {
   ACTION_THRESHOLD,
@@ -135,9 +141,17 @@ globalThis.__game = {
   canThreatenSquare,
   prepareOpeningInitiative,
   chooseNextActor,
+  animateAttack,
+  effectLayer,
+  stepOneAction,
+  togglePause,
   takeOneAction,
+  renderScoreboard,
+  scoreboardEl,
+  scoreboardTitleEl,
   squareKey,
   resetState,
+  finishSleep: () => globalThis.__finishSleep && globalThis.__finishSleep(),
 };
 `, context);
   return context.__game;
@@ -248,6 +262,66 @@ test("placement preview exposes the pawn opening move overlay", () => {
 
   assert.deepEqual(coords(game.legalMoves(preview)), ["7,4", "6,4"]);
   assert.equal(overlays.get(game.squareKey(6, 4)).includes("move"), true);
+});
+
+test("attack animation creates damage and kill effect nodes", async () => {
+  const game = loadGame({ stubAnimations: false, holdSleep: true });
+  emptyBoard(game);
+  const actor = addPiece(game, "player", "pawn", 8, 4);
+  const target = addPiece(game, "enemy", "pawn", 7, 5);
+
+  const animation = game.animateAttack(actor, target, true);
+  await Promise.resolve();
+
+  const classes = Array.from(game.effectLayer.children, (child) => child.className);
+  const damage = game.effectLayer.children.find((child) => child.className === "damage-number");
+
+  assert.equal(classes.some((className) => className.includes("hit-pulse")), true);
+  assert.equal(classes.includes("damage-number"), true);
+  assert.equal(classes.includes("ko-burst"), true);
+  assert.equal(damage.textContent, "-1");
+
+  game.finishSleep();
+  await animation;
+
+  assert.equal(game.effectLayer.children.length, 0);
+});
+
+test("step, pause, resolve, and scoreboard states still work", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  game.state.phase = "setup";
+  game.state.scoreSnapshot = null;
+  addPiece(game, "player", "pawn", 8, 4);
+  addPiece(game, "enemy", "pawn", 1, 4);
+
+  await game.stepOneAction();
+
+  assert.match(game.state.phase, /^(paused|ended)$/);
+
+  game.state.phase = "running";
+  game.togglePause();
+  assert.equal(game.state.phase, "paused");
+
+  game.state.phase = "ended";
+  game.state.result = "victory";
+  game.state.scoreSnapshot = {
+    scenarioName: "Harness",
+    startingBudget: 1,
+    budgetRemaining: 0,
+    budgetSpent: 1,
+    startActionNumber: 0,
+    playerArmy: [{ type: "pawn", side: "player" }],
+    enemyArmy: [{ type: "pawn", side: "enemy" }],
+    playerCounts: { pawn: 1 },
+    enemyCounts: { pawn: 1 },
+  };
+  game.state.actionNumber = 2;
+  game.state.pieces = [game.createPiece("player", "pawn", 7, 4)];
+  game.renderScoreboard();
+
+  assert.equal(game.scoreboardEl.hidden, false);
+  assert.equal(game.scoreboardTitleEl.textContent, "Victory");
 });
 
 for (const scenarioId of ["variety", "swarm"]) {

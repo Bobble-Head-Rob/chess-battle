@@ -964,6 +964,45 @@ select:disabled {
   background: rgba(217, 67, 67, 0.18);
 }
 
+.damage-number {
+  position: absolute;
+  transform: translate(-50%, -70%);
+  color: #b3261e;
+  background: rgba(255, 246, 225, 0.92);
+  border: 1px solid rgba(179, 38, 30, 0.35);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: clamp(0.78rem, 1.45vw, 1.12rem);
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: 0 5px 12px rgba(20, 28, 38, 0.2);
+  opacity: 0;
+  animation: damageFloat var(--effect-duration, 360ms) ease-out forwards;
+}
+
+.ko-burst {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 13%;
+  height: 13%;
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: rgba(163, 42, 42, 0.9);
+  border: 2px solid rgba(255, 244, 220, 0.9);
+  box-shadow: 0 0 0 0 rgba(217, 67, 67, 0.5), 0 8px 20px rgba(20, 28, 38, 0.28);
+  font-size: clamp(0.72rem, 1.35vw, 1rem);
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0;
+  animation: koPop var(--effect-duration, 360ms) ease-out forwards;
+}
+
 .hop-token {
   position: absolute;
   display: grid;
@@ -1013,6 +1052,36 @@ select:disabled {
   100% {
     opacity: 0;
     transform: translate(-50%, -50%) scale(1.7);
+  }
+}
+
+@keyframes damageFloat {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -42%) scale(0.82);
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -130%) scale(1.08);
+  }
+}
+
+@keyframes koPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+  28% {
+    opacity: 1;
+    box-shadow: 0 0 0 8px rgba(217, 67, 67, 0.24), 0 8px 20px rgba(20, 28, 38, 0.28);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.25);
+    box-shadow: 0 0 0 18px rgba(217, 67, 67, 0), 0 8px 20px rgba(20, 28, 38, 0);
   }
 }
 
@@ -1091,6 +1160,30 @@ select:disabled {
 
 .log-entry strong {
   color: var(--ink);
+}
+
+.log-entry.kill {
+  background: rgba(255, 246, 225, 0.72);
+  margin: 0 -6px;
+  padding-inline: 6px;
+  border-radius: 6px;
+}
+
+.log-side {
+  font-weight: 900;
+}
+
+.log-side.player {
+  color: var(--player);
+}
+
+.log-side.enemy {
+  color: var(--enemy);
+}
+
+.log-destroyed {
+  color: #a32a2a;
+  font-weight: 900;
 }
 
 .log-entry.system {

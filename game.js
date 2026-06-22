@@ -820,16 +820,39 @@ function renderLog() {
   actionLogEl.innerHTML = "";
   state.log.slice(-120).forEach((entry) => {
     const line = document.createElement("div");
-    line.className = `log-entry ${entry.kind || ""}`;
+    line.className = `log-entry ${entry.kind || ""}${entry.text.includes("destroyed") ? " kill" : ""}`;
     if (entry.number) {
       const prefix = document.createElement("strong");
       prefix.textContent = `${entry.number}. `;
       line.append(prefix);
     }
-    line.append(document.createTextNode(entry.text));
+    appendLogText(line, entry.text);
     actionLogEl.appendChild(line);
   });
   actionLogEl.scrollTop = actionLogEl.scrollHeight;
+}
+
+function appendLogText(line, text) {
+  text.split(/\b(Player|Enemy|destroyed)\b/g).forEach((part) => {
+    if (!part) {
+      return;
+    }
+    if (part === "Player" || part === "Enemy") {
+      const side = document.createElement("span");
+      side.className = `log-side ${part.toLowerCase()}`;
+      side.textContent = part;
+      line.append(side);
+      return;
+    }
+    if (part === "destroyed") {
+      const destroyed = document.createElement("span");
+      destroyed.className = "log-destroyed";
+      destroyed.textContent = part;
+      line.append(destroyed);
+      return;
+    }
+    line.append(document.createTextNode(part));
+  });
 }
 
 function handleCellClick(row, col) {
@@ -1734,6 +1757,10 @@ async function animateAttack(actor, target, willKill) {
 
   const pulse = makePulse(to.x, to.y, actor.side, duration, "hit-pulse");
   effectLayer.appendChild(pulse);
+  effectLayer.appendChild(makeDamageNumber(to.x, to.y, actor.damage, duration));
+  if (willKill) {
+    effectLayer.appendChild(makeKoBurst(to.x, to.y, duration));
+  }
   await sleep(duration);
   clearEffects();
 }
@@ -1754,6 +1781,10 @@ async function animateKnight(actor, target, willKill, duration) {
   token.style.transform = "translate(-50%, -50%)";
   effectLayer.appendChild(token);
   effectLayer.appendChild(makePulse(to.x, to.y, actor.side, duration, "hit-pulse"));
+  effectLayer.appendChild(makeDamageNumber(to.x, to.y, actor.damage, duration));
+  if (willKill) {
+    effectLayer.appendChild(makeKoBurst(to.x, to.y, duration));
+  }
 
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -1800,6 +1831,26 @@ function makePulse(x, y, side, duration, className) {
   pulse.style.top = `${y}px`;
   pulse.style.setProperty("--effect-duration", `${duration}ms`);
   return pulse;
+}
+
+function makeDamageNumber(x, y, damage, duration) {
+  const number = document.createElement("div");
+  number.className = "damage-number";
+  number.textContent = `-${damage}`;
+  number.style.left = `${x}px`;
+  number.style.top = `${y}px`;
+  number.style.setProperty("--effect-duration", `${Math.max(220, duration)}ms`);
+  return number;
+}
+
+function makeKoBurst(x, y, duration) {
+  const burst = document.createElement("div");
+  burst.className = "ko-burst";
+  burst.textContent = "KO";
+  burst.style.left = `${x}px`;
+  burst.style.top = `${y}px`;
+  burst.style.setProperty("--effect-duration", `${Math.max(240, duration)}ms`);
+  return burst;
 }
 
 function clearEffects() {
