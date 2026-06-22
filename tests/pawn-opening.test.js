@@ -254,6 +254,7 @@ globalThis.__game = {
   chooseMove,
   decideAction,
   canAttack,
+  canAttackFrom,
   canThreatenSquare,
   shouldPenalizeImmediateReturn,
   playSound,
@@ -457,6 +458,55 @@ test("immediate return moves are penalized when alternatives exist", () => {
   assert.equal(game.shouldPenalizeImmediateReturn(actor, returnMove, safe, safe, true, 2), false);
   assert.equal(game.shouldPenalizeImmediateReturn(actor, returnMove, safe, safe, false, 1), false);
   assert.equal(game.shouldPenalizeImmediateReturn(actor, returnMove, safe, lethal, false, 2), false);
+});
+
+test("bishop prefers a move creating diagonal attack potential", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const bishop = addPiece(game, "player", "bishop", 8, 1);
+  addPiece(game, "enemy", "rook", 5, 0);
+
+  const move = game.chooseMove(bishop);
+
+  assert.equal(move.row, 7);
+  assert.equal(move.col, 2);
+});
+
+test("rook prefers a move creating straight-line attack potential", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const rook = addPiece(game, "player", "rook", 8, 1);
+  const target = addPiece(game, "enemy", "bishop", 5, 3);
+
+  const move = game.chooseMove(rook);
+
+  assert.equal(game.canAttackFrom(rook, move.row, move.col, target), true);
+});
+
+test("knight prefers a move creating useful L-shape target pressure", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const knight = addPiece(game, "player", "knight", 8, 4);
+  addPiece(game, "enemy", "queen", 5, 5);
+
+  const move = game.chooseMove(knight);
+
+  assert.equal(move.row, 6);
+  assert.equal(move.col, 3);
+});
+
+test("queen avoids dangerous future-attack square when safer strong square exists", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const queen = addPiece(game, "player", "queen", 8, 4);
+  const target = addPiece(game, "enemy", "king", 5, 6);
+  const guard = addPiece(game, "enemy", "pawn", 4, 3);
+
+  const move = game.chooseMove(queen);
+
+  assert.equal(game.canAttackFrom(queen, move.row, move.col, target), true);
+  assert.notDeepEqual([move.row, move.col], [5, 4]);
+  assert.equal(game.canAttackFrom(guard, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
 });
 
 test("reset clears stale hover and selected inspection state", () => {

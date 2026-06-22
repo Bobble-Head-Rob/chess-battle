@@ -1178,7 +1178,7 @@ function chooseMove(actor) {
   const legalMoveCount = moves.length;
 
   moves.forEach((move) => {
-    const safety = scoreSquareSafety(actor, move, coverage);
+    const safety = scoreMoveSafety(actor, move, coverage);
     const safetyGain = currentSafety.penalty - safety.penalty;
     let moveScore = safety.score + Math.max(-30, Math.min(44, safetyGain * 0.38));
     let useful = false;
@@ -1190,19 +1190,35 @@ function chooseMove(actor) {
       moveReason = "choosing a safer square";
     }
 
+    // One-turn lookahead: reward what this unit can threaten from the destination
+    // without simulating a full enemy reply. Values stay below hard attack scores.
+    const futureAttack = scoreFutureAttackPotential(actor, move.row, move.col, targets);
+    createsAttack = futureAttack.hasAttack;
+    moveScore += futureAttack.score;
+    if (futureAttack.hasAttack) {
+      useful = true;
+      moveReason = PIECES[actor.type].role === "ranged" ? "creating a line of attack" : "setting up an attack";
+    }
+
+    // Ranged pieces get a compact lane-quality bonus; melee/leapers mostly use
+    // future attack potential and safety to avoid becoming passive.
+    const laneScore = scoreLanePotential(actor, move.row, move.col, targets);
+    moveScore += laneScore;
+    if (laneScore > 0 && safety.danger.attackers === 0) {
+      useful = true;
+      if (!futureAttack.hasAttack && PIECES[actor.type].role === "ranged") {
+        moveReason = "opening a firing line";
+      }
+    }
+
+    moveScore += scoreTeamworkAndBlocking(actor, move.row, move.col, safety);
+
     let bestTargetScore = -Infinity;
     targets.forEach((target) => {
       const fromDistance = distance(actor, target);
       const toDistance = distance(move, target);
-      const attacksAfterMove = canAttackFrom(actor, move.row, move.col, target);
       let score = targetScore(actor, target) - toDistance * 3;
 
-      if (attacksAfterMove) {
-        createsAttack = true;
-        score += PIECES[actor.type].role === "ranged" ? 180 : 120;
-        useful = true;
-        moveReason = PIECES[actor.type].role === "ranged" ? "creating a line of attack" : "setting up an attack";
-      }
       if (toDistance < fromDistance) {
         score += (fromDistance - toDistance) * 16;
         useful = true;
@@ -1218,14 +1234,8 @@ function chooseMove(actor) {
 
     if (PIECES[actor.type].role === "ranged") {
       if (hasAnyLineFrom(actor, move.row, move.col)) {
-        moveScore += 28;
         useful = true;
         moveReason = "opening a firing line";
-      }
-      const laneBonus = openLineScore(actor, move.row, move.col) * MOVE_PROFILES[actor.type].lane;
-      moveScore += safety.danger.attackers > 0 ? laneBonus * 0.35 : laneBonus;
-      if (laneBonus > 0 && safety.danger.attackers === 0) {
-        useful = true;
       }
     }
 
@@ -1330,6 +1340,110 @@ function scoreSquareSafety(actor, square, coverage) {
     reward,
     score: reward - penalty,
   };
+}
+
+function scoreMoveSafety(actor, move, coverage) {
+  return scoreSquareSafety(actor, move, coverage);
+}
+
+function scoreFutureAttackPotential(actor, row, col, targets) {
+  let best = 0;
+  let total = 0;
+  let hasAttack = false;
+
+  targets.forEach((target) => {
+    if (!canAttackFrom(actor, row, col, target)) {
+      return;
+    }
+    hasAttack = true;
+    const canFinish = target.hp <= actor.damage;
+    const roleBonus = futureAttackRoleBonus(actor);
+    const score = targetScore(actor, target) * 0.85 + roleBonus + (canFinish ? 34 : 0) + Math.max(0, target.maxHp - target.hp) * 4;
+    best = Math.max(best, score);
+    total += score * 0.18;
+  });
+
+  return { hasAttack, score: best + total };
+}
+
+function futureAttackRoleBonus(actor) {
+  if (PIECES[actor.type].role === "ranged") return 120;
+  if (actor.type === "knight") return 104;
+  if (actor.type === "king") return 82;
+  if (actor.type === "pawn") return 58;
+  return 70;
+}
+
+function scoreLanePotential(actor, row, col, targets) {
+  if (PIECES[actor.type].role !== "ranged") {
+    return actor.type === "pawn" ? scorePawnForwardPressure(actor, row, col, targets) : 0;
+  }
+
+  const openLine = openLineScore(actor, row, col) * MOVE_PROFILES[actor.type].lane * 0.75;
+  const visibleTargetScore = visibleLineTargets(actor, row, col).reduce((score, target) => score + targetScore(actor, target) * 0.28, 0);
+  const multiLineBonus = actor.type === "queen" ? Math.min(30, visibleLineTargets(actor, row, col).length * 10) : 0;
+  return openLine + visibleTargetScore + multiLineBonus;
+}
+
+function visibleLineTargets(actor, row, col) {
+  const targets = [];
+  directionsFor(actor.type).forEach(([dr, dc]) => {
+    let nextRow = row + dr;
+    let nextCol = col + dc;
+    while (inBounds(nextRow, nextCol)) {
+      const occupant = pieceAt(nextRow, nextCol, new Set([actor.id]));
+      if (occupant) {
+        if (occupant.side !== actor.side && canAttackFrom(actor, row, col, occupant)) {
+          targets.push(occupant);
+        }
+        break;
+      }
+      nextRow += dr;
+      nextCol += dc;
+    }
+  });
+  return targets;
+}
+
+function scorePawnForwardPressure(actor, row, col, targets) {
+  const forward = pawnForward(actor.side);
+  return targets.some((target) => target.row === row + forward && Math.abs(target.col - col) === 1) ? 18 : 0;
+}
+
+function scoreTeamworkAndBlocking(actor, row, col, safety) {
+  const support = Math.min(18, safety.protection.attackers * 4 + safety.protection.damage * 2);
+  const blockingPenalty = blocksFriendlyRangedLane(actor, row, col) ? 14 : 0;
+  return support - blockingPenalty;
+}
+
+function blocksFriendlyRangedLane(actor, row, col) {
+  return sidePieces(actor.side).some((friend) => {
+    if (friend.id === actor.id || PIECES[friend.type].role !== "ranged") {
+      return false;
+    }
+    return sidePieces(opponentSide(actor.side)).some((target) => canAttack(friend, target) && squareLiesBetween(friend.row, friend.col, target.row, target.col, row, col));
+  });
+}
+
+function squareLiesBetween(fromRow, fromCol, toRow, toCol, row, col) {
+  const stepRow = Math.sign(toRow - fromRow);
+  const stepCol = Math.sign(toCol - fromCol);
+  if (stepRow !== Math.sign(row - fromRow) && row !== fromRow) {
+    return false;
+  }
+  if (stepCol !== Math.sign(col - fromCol) && col !== fromCol) {
+    return false;
+  }
+  let nextRow = fromRow + stepRow;
+  let nextCol = fromCol + stepCol;
+  while (nextRow !== toRow || nextCol !== toCol) {
+    if (nextRow === row && nextCol === col) {
+      return true;
+    }
+    nextRow += stepRow;
+    nextCol += stepCol;
+  }
+  return false;
 }
 
 function shouldPenalizeImmediateReturn(actor, move, safety, currentSafety, createsAttack, legalMoveCount) {
