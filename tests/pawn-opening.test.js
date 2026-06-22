@@ -488,6 +488,40 @@ test("rook prefers a move creating straight-line attack potential", () => {
   assert.equal(game.canAttackFrom(rook, move.row, move.col, target), true);
 });
 
+test("rook avoids pawn diagonal threat when safe lane options exist", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const rook = addPiece(game, "player", "rook", 8, 4);
+  const pawn = addPiece(game, "enemy", "pawn", 5, 3);
+  addPiece(game, "enemy", "bishop", 6, 7);
+
+  const move = game.chooseMove(rook);
+
+  assert.notEqual(move, null);
+  assert.equal(game.canAttackFrom(pawn, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
+});
+
+test("rook avoids knight attack range when safe lane options exist", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const rook = addPiece(game, "player", "rook", 8, 4);
+  const knight = addPiece(game, "enemy", "knight", 4, 5);
+  addPiece(game, "enemy", "bishop", 6, 7);
+
+  const move = game.chooseMove(rook);
+
+  assert.notEqual(move, null);
+  assert.equal(game.canAttackFrom(knight, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
+});
+
+test("rook holds a useful safe lane instead of wandering", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const rook = addPiece(game, "player", "rook", 5, 4);
+
+  assert.equal(game.chooseMove(rook), null);
+});
+
 test("knight prefers a move creating useful L-shape target pressure", () => {
   const game = loadGame();
   emptyBoard(game);

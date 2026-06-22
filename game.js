@@ -1230,6 +1230,9 @@ function chooseMove(actor) {
   const targets = sidePieces(opponentSide(actor.side));
   const coverage = buildMoveCoverage(actor);
   const currentSafety = scoreSquareSafety(actor, { row: actor.row, col: actor.col }, coverage);
+  const currentLaneScore = scoreLanePotential(actor, actor.row, actor.col, targets);
+  const currentFutureAttack = scoreFutureAttackPotential(actor, actor.row, actor.col, targets);
+  const currentRookAnchorScore = actor.type === "rook" ? scoreRookAnchor(actor, currentSafety, currentLaneScore, currentFutureAttack) : 0;
   const legalMoveCount = moves.length;
 
   moves.forEach((move) => {
@@ -1259,7 +1262,7 @@ function chooseMove(actor) {
     // future attack potential and safety to avoid becoming passive.
     const laneScore = scoreLanePotential(actor, move.row, move.col, targets);
     moveScore += laneScore;
-    if (laneScore > 0 && safety.danger.attackers === 0) {
+    if (laneScore > 0 && safety.danger.attackers === 0 && (actor.type !== "rook" || isRookLaneImprovement(laneScore, currentLaneScore, futureAttack))) {
       useful = true;
       if (!futureAttack.hasAttack && PIECES[actor.type].role === "ranged") {
         moveReason = "opening a firing line";
@@ -1267,6 +1270,7 @@ function chooseMove(actor) {
     }
 
     moveScore += scoreTeamworkAndBlocking(actor, move.row, move.col, safety);
+    moveScore += scoreRookLaneDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore);
 
     let bestTargetScore = -Infinity;
     targets.forEach((target) => {
@@ -1276,7 +1280,9 @@ function chooseMove(actor) {
 
       if (toDistance < fromDistance) {
         score += (fromDistance - toDistance) * 16;
-        useful = true;
+        if (actor.type !== "rook") {
+          useful = true;
+        }
       }
       if (score > bestTargetScore) {
         bestTargetScore = score;
@@ -1317,6 +1323,10 @@ function chooseMove(actor) {
       best = { row: move.row, col: move.col, reason: safetyAwareReason(moveReason, safety) };
     }
   });
+
+  if (actor.type === "rook" && shouldRookHoldLane(currentSafety, currentRookAnchorScore, bestScore)) {
+    return null;
+  }
 
   return best;
 }
@@ -1398,7 +1408,19 @@ function scoreSquareSafety(actor, square, coverage) {
 }
 
 function scoreMoveSafety(actor, move, coverage) {
-  return scoreSquareSafety(actor, move, coverage);
+  const safety = scoreSquareSafety(actor, move, coverage);
+  if (actor.type !== "rook") {
+    return safety;
+  }
+
+  // Rooks are valuable lane controllers, so pawn and knight coverage should
+  // matter more than it does for disposable front-line pieces.
+  const rookPenalty = scoreRookDangerPenalty(actor, move, safety);
+  return {
+    ...safety,
+    penalty: safety.penalty + rookPenalty,
+    score: safety.score - rookPenalty,
+  };
 }
 
 function scoreFutureAttackPotential(actor, row, col, targets) {
@@ -1433,11 +1455,89 @@ function scoreLanePotential(actor, row, col, targets) {
   if (PIECES[actor.type].role !== "ranged") {
     return actor.type === "pawn" ? scorePawnForwardPressure(actor, row, col, targets) : 0;
   }
+  if (actor.type === "rook") {
+    return scoreRookLanePotential(actor, row, col, targets);
+  }
 
   const openLine = openLineScore(actor, row, col) * MOVE_PROFILES[actor.type].lane * 0.75;
   const visibleTargetScore = visibleLineTargets(actor, row, col).reduce((score, target) => score + targetScore(actor, target) * 0.28, 0);
   const multiLineBonus = actor.type === "queen" ? Math.min(30, visibleLineTargets(actor, row, col).length * 10) : 0;
   return openLine + visibleTargetScore + multiLineBonus;
+}
+
+function scoreRookLanePotential(actor, row, col, targets) {
+  const visibleTargets = visibleLineTargets(actor, row, col);
+  const openLine = openLineScore(actor, row, col) * MOVE_PROFILES.rook.lane * 0.45;
+  const visibleTargetScore = visibleTargets.reduce((score, target) => score + targetScore(actor, target) * 0.42, 0);
+  const laneContactBonus = visibleTargets.length > 0 ? 48 : 0;
+  return openLine + visibleTargetScore + laneContactBonus;
+}
+
+function isRookLaneImprovement(laneScore, currentLaneScore, futureAttack) {
+  return futureAttack.hasAttack || laneScore >= currentLaneScore + 12 || laneScore >= 72;
+}
+
+function scoreRookLaneDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore) {
+  if (actor.type !== "rook") {
+    return 0;
+  }
+  let score = 0;
+
+  // Discourage drifting into ordinary open squares. Rooks should relocate when
+  // the move makes a lane materially better, creates an attack, or gets safer.
+  if (!futureAttack.hasAttack && laneScore < currentLaneScore + 12) {
+    score -= 34;
+  }
+  if (safety.protection.attackers > 0) {
+    score += 16 + safety.protection.attackers * 6;
+  }
+  if (safety.danger.attackers > 0 && !futureAttack.hasAttack) {
+    score -= 46;
+  }
+  return score;
+}
+
+function scoreRookAnchor(actor, safety, laneScore, futureAttack) {
+  if (safety.danger.attackers > 0) {
+    return -Infinity;
+  }
+  let score = laneScore + futureAttack.score;
+  if (laneScore >= 44) {
+    score += 42;
+  }
+  if (safety.protection.attackers > 0) {
+    score += 14;
+  }
+  return score;
+}
+
+function shouldRookHoldLane(currentSafety, currentRookAnchorScore, bestMoveScore) {
+  return currentSafety.danger.attackers === 0 && currentRookAnchorScore >= 86 && bestMoveScore < currentRookAnchorScore + 26;
+}
+
+function scoreRookDangerPenalty(actor, move, safety) {
+  let penalty = 0;
+  safety.danger.pieces.forEach((attacker) => {
+    if (attacker.type === "pawn") {
+      penalty += 138;
+    } else if (attacker.type === "knight") {
+      penalty += 122;
+    } else {
+      penalty += 26 + PIECES[attacker.type].cost * 5;
+    }
+  });
+  if (safety.danger.damage >= actor.hp) {
+    penalty += 130;
+  } else if (safety.danger.damage >= Math.ceil(actor.hp / 2)) {
+    penalty += 58;
+  }
+  if (isAdjacentToEnemyPawn(actor, move.row, move.col)) {
+    penalty += 54;
+  }
+  if (safety.protection.attackers > 0) {
+    penalty = Math.max(0, penalty - Math.min(42, safety.protection.attackers * 14 + safety.protection.damage * 4));
+  }
+  return penalty;
 }
 
 function visibleLineTargets(actor, row, col) {
@@ -1466,6 +1566,10 @@ function visibleLineTargets(actor, row, col) {
 function scorePawnForwardPressure(actor, row, col, targets) {
   const forward = pawnForward(actor.side);
   return targets.some((target) => target.row === row + forward && Math.abs(target.col - col) === 1) ? 18 : 0;
+}
+
+function isAdjacentToEnemyPawn(actor, row, col) {
+  return sidePieces(opponentSide(actor.side)).some((piece) => piece.type === "pawn" && Math.max(Math.abs(piece.row - row), Math.abs(piece.col - col)) === 1);
 }
 
 function scoreTeamworkAndBlocking(actor, row, col, safety) {
