@@ -651,17 +651,33 @@ select:disabled {
   background: var(--enemy);
 }
 
-.speed-control {
+.speed-control,
+.sound-toggle,
+.sound-volume {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.speed-control {
   margin-left: auto;
 }
 
 .speed-control select {
   min-height: 38px;
+}
+
+.sound-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--player);
+}
+
+.sound-volume input {
+  width: 90px;
+  accent-color: var(--player);
 }
 
 .board-shell {

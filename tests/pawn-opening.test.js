@@ -103,10 +103,99 @@ class FakeElement {
   }
 }
 
+class FakeAudioParam {
+  constructor(value = 0) {
+    this.value = value;
+    this.events = [];
+  }
+
+  setValueAtTime(value, time) {
+    this.value = value;
+    this.events.push(["set", value, time]);
+  }
+
+  linearRampToValueAtTime(value, time) {
+    this.value = value;
+    this.events.push(["linear", value, time]);
+  }
+
+  exponentialRampToValueAtTime(value, time) {
+    this.value = value;
+    this.events.push(["exponential", value, time]);
+  }
+}
+
+class FakeAudioNode {
+  constructor() {
+    this.connections = [];
+  }
+
+  connect(node) {
+    this.connections.push(node);
+    return node;
+  }
+}
+
+class FakeGainNode extends FakeAudioNode {
+  constructor() {
+    super();
+    this.gain = new FakeAudioParam(1);
+  }
+}
+
+class FakeOscillatorNode extends FakeAudioNode {
+  constructor() {
+    super();
+    this.frequency = new FakeAudioParam(440);
+    this.type = "sine";
+    this.started = false;
+    this.stopped = false;
+  }
+
+  start(time) {
+    this.started = time;
+  }
+
+  stop(time) {
+    this.stopped = time;
+  }
+}
+
+function createFakeAudioContextClass(instances) {
+  return class FakeAudioContext {
+    constructor() {
+      this.currentTime = 0;
+      this.destination = new FakeAudioNode();
+      this.state = "running";
+      this.gains = [];
+      this.oscillators = [];
+      instances.push(this);
+    }
+
+    createGain() {
+      const gain = new FakeGainNode();
+      this.gains.push(gain);
+      return gain;
+    }
+
+    createOscillator() {
+      const oscillator = new FakeOscillatorNode();
+      this.oscillators.push(oscillator);
+      return oscillator;
+    }
+
+    resume() {
+      this.state = "running";
+      return Promise.resolve();
+    }
+  };
+}
+
 function loadGame(options = {}) {
-  const { stubAnimations = true, holdSleep = false } = options;
+  const { stubAnimations = true, holdSleep = false, audio = false } = options;
   const elements = new Map();
   const timers = [];
+  const audioInstances = [];
   const document = {
     getElementById(id) {
       if (!elements.has(id)) {
@@ -127,6 +216,7 @@ function loadGame(options = {}) {
     console,
     document,
     __timers: timers,
+    __audioInstances: audioInstances,
     window: {
       setTimeout(callback, ms) {
         timers.push({ callback, ms });
@@ -134,6 +224,9 @@ function loadGame(options = {}) {
       },
     },
   };
+  if (audio) {
+    context.window.AudioContext = createFakeAudioContextClass(audioInstances);
+  }
   vm.createContext(context);
   const source = fs.readFileSync(path.join(__dirname, "..", "game.js"), "utf8");
   const sleepStub = holdSleep
@@ -162,6 +255,8 @@ globalThis.__game = {
   decideAction,
   canAttack,
   canThreatenSquare,
+  playSound,
+  updateMasterVolume,
   prepareOpeningInitiative,
   chooseNextActor,
   animateAttack,
@@ -175,13 +270,17 @@ globalThis.__game = {
   inspectDetailsEl,
   scoreboardEl,
   scoreboardTitleEl,
+  soundToggleEl,
+  soundVolumeEl,
   squareKey,
   resetState,
   timers: globalThis.__timers,
+  audioInstances: globalThis.__audioInstances,
   runTimers: () => globalThis.__timers.splice(0).forEach((timer) => timer.callback()),
   finishSleep: () => globalThis.__finishSleep && globalThis.__finishSleep(),
 };
 `, context);
+  context.__game.audioInstances = audioInstances;
   return context.__game;
 }
 
@@ -356,6 +455,32 @@ test("reset clears stale hover and selected inspection state", () => {
 
   assert.equal(game.state.selectedInspectPieceId, null);
   assert.equal(game.state.hoverInspectPieceId, null);
+});
+
+test("sound toggle and volume control generated sound calls", () => {
+  const game = loadGame({ audio: true });
+
+  assert.equal(game.state.soundEnabled, true);
+  assert.equal(game.state.soundVolume, 0.3);
+  assert.equal(game.playSound("place"), true);
+  assert.equal(game.audioInstances.length, 1);
+  assert.equal(game.audioInstances[0].oscillators.length, 2);
+  assert.equal(game.audioInstances[0].gains[0].gain.value, 0.3);
+
+  game.state.soundEnabled = false;
+  game.updateMasterVolume();
+  const oscillatorCount = game.audioInstances[0].oscillators.length;
+
+  assert.equal(game.playSound("move"), false);
+  assert.equal(game.audioInstances[0].oscillators.length, oscillatorCount);
+  assert.equal(game.audioInstances[0].gains[0].gain.value, 0);
+
+  game.state.soundEnabled = true;
+  game.state.soundVolume = 0.2;
+  game.updateMasterVolume();
+
+  assert.equal(game.playSound("ko"), true);
+  assert.equal(game.audioInstances[0].gains[0].gain.value, 0.2);
 });
 
 test("attack animation creates damage and kill effect nodes", async () => {

@@ -182,7 +182,12 @@ const pauseButton = document.getElementById("pauseButton");
 const stepButton = document.getElementById("stepButton");
 const resetButton = document.getElementById("resetButton");
 const speedSelect = document.getElementById("speedSelect");
+const soundToggleEl = document.getElementById("soundToggle");
+const soundVolumeEl = document.getElementById("soundVolume");
 const clearLogButton = document.getElementById("clearLogButton");
+
+let audioContext = null;
+let masterGain = null;
 
 const state = {
   pieces: [],
@@ -192,6 +197,8 @@ const state = {
   phase: "setup",
   result: null,
   speed: "normal",
+  soundEnabled: true,
+  soundVolume: 0.3,
   activeId: null,
   hoverInspectPieceId: null,
   selectedInspectPieceId: null,
@@ -501,6 +508,8 @@ function renderStatus() {
   stepButton.disabled = state.phase === "ended" || state.actionBusy;
   resetButton.disabled = state.actionBusy;
   scenarioSelectEl.disabled = state.actionBusy;
+  soundToggleEl.checked = state.soundEnabled;
+  soundVolumeEl.value = String(state.soundVolume);
 
   if (state.phase === "setup") {
     const selected = PIECES[state.selectedType];
@@ -906,6 +915,7 @@ function appendLogText(line, text) {
 }
 
 function handleCellClick(row, col) {
+  ensureAudioContext();
   const occupyingPiece = pieceAt(row, col);
   if (occupyingPiece) {
     inspectPiece(occupyingPiece.id, "selected");
@@ -939,6 +949,7 @@ function placePlayerPiece(row, col) {
   state.pieces.push(piece);
   clearInspectState();
   state.previewPlacementSquare = null;
+  playSound("place");
   addLog(`Player ${template.label} deployed on ${squareName(row, col)} for ${template.cost}.`, "system");
   render();
 }
@@ -1347,6 +1358,7 @@ async function resolveAttack(actor, target) {
   const to = { row: target.row, col: target.col };
   const targetStartHp = target.hp;
   const willKill = target.hp <= actor.damage;
+  playAttackSound(actor, willKill);
   await animateAttack(actor, target, willKill);
 
   target.hp -= actor.damage;
@@ -1383,6 +1395,7 @@ async function resolveAttack(actor, target) {
 
 async function resolveMove(actor, move, reason) {
   const from = { row: actor.row, col: actor.col };
+  playSound("move");
   state.destination = { row: move.row, col: move.col };
   render();
   await animateMove(actor, move);
@@ -1968,9 +1981,11 @@ function checkEndState() {
   state.destination = null;
   if (playerCount > 0 && enemyCount === 0) {
     state.result = "victory";
+    playSound("victory");
     addLog("Victory! Player army wins the battle.", "victory");
   } else if (enemyCount > 0 && playerCount === 0) {
     state.result = "defeat";
+    playSound("defeat");
     addLog("Defeat. Enemy army wins the battle.", "defeat");
   } else {
     state.result = "draw";
@@ -1995,13 +2010,133 @@ function pieceName(piece) {
   return `${sideName(piece.side)} ${PIECES[piece.type].label}`;
 }
 
+function ensureAudioContext() {
+  if (!state.soundEnabled) {
+    return null;
+  }
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) {
+    return null;
+  }
+  if (!audioContext) {
+    audioContext = new AudioContextCtor();
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = state.soundVolume;
+    masterGain.connect(audioContext.destination);
+  }
+  updateMasterVolume();
+  if (audioContext.state === "suspended" && typeof audioContext.resume === "function") {
+    audioContext.resume();
+  }
+  return audioContext;
+}
+
+function updateMasterVolume() {
+  if (masterGain) {
+    masterGain.gain.value = state.soundEnabled ? state.soundVolume : 0;
+  }
+}
+
+function playSound(name) {
+  const context = ensureAudioContext();
+  if (!context || !masterGain) {
+    return false;
+  }
+
+  const now = context.currentTime;
+  if (name === "place") {
+    playTone(520, 0.045, { type: "triangle", gain: 0.16, start: now });
+    playTone(760, 0.035, { type: "sine", gain: 0.08, start: now + 0.035 });
+    return true;
+  }
+  if (name === "move") {
+    playTone(330, 0.08, { type: "triangle", gain: 0.11, endFrequency: 250, start: now });
+    return true;
+  }
+  if (name === "melee") {
+    playTone(140, 0.1, { type: "triangle", gain: 0.18, endFrequency: 86, start: now });
+    return true;
+  }
+  if (name === "ranged") {
+    playTone(620, 0.11, { type: "sawtooth", gain: 0.09, endFrequency: 1120, start: now });
+    playTone(1240, 0.06, { type: "sine", gain: 0.04, start: now + 0.035 });
+    return true;
+  }
+  if (name === "knight") {
+    playTone(420, 0.07, { type: "square", gain: 0.08, start: now });
+    playTone(180, 0.08, { type: "triangle", gain: 0.13, start: now + 0.055 });
+    return true;
+  }
+  if (name === "ko") {
+    playTone(96, 0.16, { type: "triangle", gain: 0.22, endFrequency: 48, start: now });
+    playTone(52, 0.12, { type: "sine", gain: 0.12, start: now + 0.04 });
+    return true;
+  }
+  if (name === "victory") {
+    [523.25, 659.25, 783.99].forEach((frequency, index) => {
+      playTone(frequency, 0.34, { type: "sine", gain: 0.08, start: now + index * 0.035 });
+    });
+    return true;
+  }
+  if (name === "defeat") {
+    [220, 185, 146.83].forEach((frequency, index) => {
+      playTone(frequency, 0.38, { type: "triangle", gain: 0.09, start: now + index * 0.045 });
+    });
+    return true;
+  }
+  return false;
+}
+
+function playAttackSound(actor, willKill) {
+  if (actor.type === "knight") {
+    playSound("knight");
+  } else if (PIECES[actor.type].role === "ranged") {
+    playSound("ranged");
+  } else {
+    playSound("melee");
+  }
+  if (willKill) {
+    playSound("ko");
+  }
+}
+
+function playTone(frequency, duration, options = {}) {
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const start = options.start ?? audioContext.currentTime;
+  const end = start + duration;
+  const peakGain = options.gain ?? 0.1;
+
+  oscillator.type = options.type || "sine";
+  oscillator.frequency.setValueAtTime(frequency, start);
+  if (options.endFrequency) {
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, options.endFrequency), end);
+  }
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.linearRampToValueAtTime(peakGain, start + Math.min(0.025, duration * 0.35));
+  gain.gain.exponentialRampToValueAtTime(0.0001, end);
+  oscillator.connect(gain);
+  gain.connect(masterGain);
+  oscillator.start(start);
+  oscillator.stop(end + 0.02);
+}
+
 function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-startButton.addEventListener("click", startBattle);
-pauseButton.addEventListener("click", togglePause);
-stepButton.addEventListener("click", stepOneAction);
+startButton.addEventListener("click", () => {
+  ensureAudioContext();
+  startBattle();
+});
+pauseButton.addEventListener("click", () => {
+  ensureAudioContext();
+  togglePause();
+});
+stepButton.addEventListener("click", () => {
+  ensureAudioContext();
+  stepOneAction();
+});
 resetButton.addEventListener("click", resetState);
 scoreboardResetButton.addEventListener("click", resetState);
 scenarioSelectEl.addEventListener("change", () => {
@@ -2010,6 +2145,17 @@ scenarioSelectEl.addEventListener("change", () => {
 });
 speedSelect.addEventListener("change", () => {
   state.speed = speedSelect.value;
+});
+soundToggleEl.addEventListener("change", () => {
+  state.soundEnabled = soundToggleEl.checked;
+  if (state.soundEnabled) {
+    ensureAudioContext();
+  }
+  updateMasterVolume();
+});
+soundVolumeEl.addEventListener("input", () => {
+  state.soundVolume = Number(soundVolumeEl.value);
+  updateMasterVolume();
 });
 overlayMovesEl.addEventListener("change", () => {
   state.overlays.moves = overlayMovesEl.checked;

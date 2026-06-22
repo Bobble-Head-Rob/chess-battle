@@ -17,6 +17,7 @@ v0 scope:
 - Collapsible How to Play help and piece inspection panels.
 - Tactical movement, attack, threat, and protection overlays.
 - Start/pause/step battle loop.
+- Optional browser-generated sound effects with volume control.
 - Initiative system.
 - Basic piece AI.
 
