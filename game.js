@@ -1,4 +1,5 @@
 const ACTION_THRESHOLD = 10;
+const DEFAULT_ACTION_LIMIT = 500;
 const FILES = "ABCDEFGHIJKL";
 
 const SCENARIOS = {
@@ -248,6 +249,8 @@ function createPiece(side, type, row, col) {
     damage: template.damage,
     speed: template.speed,
     initiative: 0,
+    previousRow: null,
+    previousCol: null,
     hasMoved: false,
     openingActionUsed: false,
   };
@@ -726,6 +729,8 @@ function createVirtualPiece(side, type, row, col) {
     damage: template.damage,
     speed: template.speed,
     initiative: 0,
+    previousRow: null,
+    previousCol: null,
     hasMoved: false,
     openingActionUsed: false,
   };
@@ -1170,12 +1175,14 @@ function chooseMove(actor) {
   const targets = sidePieces(opponentSide(actor.side));
   const coverage = buildMoveCoverage(actor);
   const currentSafety = scoreSquareSafety(actor, { row: actor.row, col: actor.col }, coverage);
+  const legalMoveCount = moves.length;
 
   moves.forEach((move) => {
     const safety = scoreSquareSafety(actor, move, coverage);
     const safetyGain = currentSafety.penalty - safety.penalty;
     let moveScore = safety.score + Math.max(-30, Math.min(44, safetyGain * 0.38));
     let useful = false;
+    let createsAttack = false;
     let moveReason = "closing distance";
 
     if (safetyGain > 24) {
@@ -1191,6 +1198,7 @@ function chooseMove(actor) {
       let score = targetScore(actor, target) - toDistance * 3;
 
       if (attacksAfterMove) {
+        createsAttack = true;
         score += PIECES[actor.type].role === "ranged" ? 180 : 120;
         useful = true;
         moveReason = PIECES[actor.type].role === "ranged" ? "creating a line of attack" : "setting up an attack";
@@ -1230,6 +1238,13 @@ function chooseMove(actor) {
 
     if (safety.danger.attackers === 0 && currentSafety.danger.attackers > 0 && moveReason === "closing distance") {
       moveReason = "stepping out of danger";
+    }
+
+    if (shouldPenalizeImmediateReturn(actor, move, safety, currentSafety, createsAttack, legalMoveCount)) {
+      moveScore -= 46;
+      if (moveReason === "closing distance") {
+        moveReason = "avoiding a repetitive route";
+      }
     }
 
     if (useful && moveScore > bestScore) {
@@ -1317,6 +1332,21 @@ function scoreSquareSafety(actor, square, coverage) {
   };
 }
 
+function shouldPenalizeImmediateReturn(actor, move, safety, currentSafety, createsAttack, legalMoveCount) {
+  if (!isImmediateReturn(actor, move) || legalMoveCount <= 1 || createsAttack) {
+    return false;
+  }
+  return !(isLethalDanger(actor, currentSafety) && !isLethalDanger(actor, safety));
+}
+
+function isImmediateReturn(actor, move) {
+  return actor.previousRow === move.row && actor.previousCol === move.col;
+}
+
+function isLethalDanger(actor, safety) {
+  return safety.danger.damage >= actor.hp || safety.danger.maxDamage >= actor.hp;
+}
+
 function safetyAwareReason(reason, safety) {
   if (safety.danger.attackers === 0 && reason === "choosing a safer square") {
     return reason;
@@ -1371,6 +1401,8 @@ async function resolveAttack(actor, target) {
     state.pieces = state.pieces.filter((piece) => piece.id !== target.id);
     message += ` ${targetLabel} destroyed.`;
     if (shouldMoveIntoTarget(actor)) {
+      actor.previousRow = from.row;
+      actor.previousCol = from.col;
       actor.row = to.row;
       actor.col = to.col;
       message += ` ${PIECES[actor.type].label} moves to ${squareName(to.row, to.col)}.`;
@@ -1399,6 +1431,8 @@ async function resolveMove(actor, move, reason) {
   state.destination = { row: move.row, col: move.col };
   render();
   await animateMove(actor, move);
+  actor.previousRow = from.row;
+  actor.previousCol = from.col;
   actor.row = move.row;
   actor.col = move.col;
   if (actor.type === "pawn" && isPawnOpeningAction(actor)) {
@@ -1684,7 +1718,7 @@ function renderScoreboard() {
   const summary = battleSummary();
   if (!summary) {
     scoreboardEl.hidden = true;
-    scoreboardEl.classList.remove("victory", "defeat");
+    scoreboardEl.classList.remove("victory", "defeat", "stalemate");
     scoreboardStatsEl.innerHTML = "";
     return;
   }
@@ -1692,6 +1726,7 @@ function renderScoreboard() {
   scoreboardEl.hidden = false;
   scoreboardEl.classList.toggle("victory", summary.result === "Victory");
   scoreboardEl.classList.toggle("defeat", summary.result === "Defeat");
+  scoreboardEl.classList.toggle("stalemate", summary.result === "Stalemate");
   scoreboardTitleEl.textContent = summary.result;
   scoreboardGradeEl.textContent = summary.grade;
   scoreboardStatsEl.innerHTML = "";
@@ -1719,7 +1754,7 @@ function renderScoreboard() {
 }
 
 function battleSummary() {
-  if (state.phase !== "ended" || !["victory", "defeat"].includes(state.result) || !state.scoreSnapshot) {
+  if (state.phase !== "ended" || !["victory", "defeat", "stalemate", "draw"].includes(state.result) || !state.scoreSnapshot) {
     return null;
   }
   const snapshot = state.scoreSnapshot;
@@ -1728,7 +1763,7 @@ function battleSummary() {
   const playerLostCounts = subtractCounts(snapshot.playerCounts, pieceCounts(survivingPlayer));
   const enemyDestroyedCounts = subtractCounts(snapshot.enemyCounts, pieceCounts(survivingEnemy));
   const summary = {
-    result: state.result === "victory" ? "Victory" : "Defeat",
+    result: resultLabel(state.result),
     scenarioName: snapshot.scenarioName,
     actionsTaken: state.actionNumber - snapshot.startActionNumber,
     startingBudget: snapshot.startingBudget,
@@ -1747,6 +1782,12 @@ function battleSummary() {
 }
 
 function gradeBattle(summary) {
+  if (summary.result === "Stalemate") {
+    return "D";
+  }
+  if (summary.result === "Draw") {
+    return "D";
+  }
   if (summary.result !== "Victory") {
     return "F";
   }
@@ -1773,6 +1814,13 @@ function gradeBattle(summary) {
   if (score >= 58) return "B";
   if (score >= 42) return "C";
   return "D";
+}
+
+function resultLabel(result) {
+  if (result === "victory") return "Victory";
+  if (result === "defeat") return "Defeat";
+  if (result === "stalemate") return "Stalemate";
+  return "Draw";
 }
 
 function opponentSide(side) {
@@ -1974,6 +2022,14 @@ function checkEndState() {
   const playerCount = sidePieces("player").length;
   const enemyCount = sidePieces("enemy").length;
   if (playerCount > 0 && enemyCount > 0) {
+    if (state.actionNumber >= battleActionLimit()) {
+      state.phase = "ended";
+      state.result = "stalemate";
+      state.activeId = null;
+      state.destination = null;
+      addLog("Stalemate: action limit reached.", "system");
+      return true;
+    }
     return false;
   }
   state.phase = "ended";
@@ -1992,6 +2048,10 @@ function checkEndState() {
     addLog("Draw. No pieces remain.", "system");
   }
   return true;
+}
+
+function battleActionLimit() {
+  return currentScenario().actionLimit || DEFAULT_ACTION_LIMIT;
 }
 
 function squareName(row, col) {

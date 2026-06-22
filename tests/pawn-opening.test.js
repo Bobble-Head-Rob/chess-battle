@@ -255,9 +255,11 @@ globalThis.__game = {
   decideAction,
   canAttack,
   canThreatenSquare,
+  shouldPenalizeImmediateReturn,
   playSound,
   updateMasterVolume,
   prepareOpeningInitiative,
+  captureScoreSnapshot,
   chooseNextActor,
   animateAttack,
   effectLayer,
@@ -270,6 +272,7 @@ globalThis.__game = {
   inspectDetailsEl,
   scoreboardEl,
   scoreboardTitleEl,
+  scoreboardGradeEl,
   soundToggleEl,
   soundVolumeEl,
   squareKey,
@@ -443,6 +446,19 @@ test("clicked inspection remains selected after hover leaves another piece", () 
   assert.equal(game.activeBoardInspection(), selected);
 });
 
+test("immediate return moves are penalized when alternatives exist", () => {
+  const game = loadGame();
+  const actor = { previousRow: 4, previousCol: 4, hp: 2 };
+  const returnMove = { row: 4, col: 4 };
+  const safe = { danger: { damage: 0, maxDamage: 0 } };
+  const lethal = { danger: { damage: 2, maxDamage: 2 } };
+
+  assert.equal(game.shouldPenalizeImmediateReturn(actor, returnMove, safe, safe, false, 2), true);
+  assert.equal(game.shouldPenalizeImmediateReturn(actor, returnMove, safe, safe, true, 2), false);
+  assert.equal(game.shouldPenalizeImmediateReturn(actor, returnMove, safe, safe, false, 1), false);
+  assert.equal(game.shouldPenalizeImmediateReturn(actor, returnMove, safe, lethal, false, 2), false);
+});
+
 test("reset clears stale hover and selected inspection state", () => {
   const game = loadGame();
   emptyBoard(game);
@@ -455,6 +471,32 @@ test("reset clears stale hover and selected inspection state", () => {
 
   assert.equal(game.state.selectedInspectPieceId, null);
   assert.equal(game.state.hoverInspectPieceId, null);
+});
+
+test("pawn mirror reaches stalemate action cap and scoreboard shows stalemate", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  game.SCENARIOS.variety.actionLimit = 40;
+  game.state.phase = "running";
+  for (let col = 2; col <= 7; col += 1) {
+    addPiece(game, "player", "pawn", 8, col);
+    addPiece(game, "enemy", "pawn", 1, col);
+  }
+  game.captureScoreSnapshot();
+  game.prepareOpeningInitiative();
+
+  for (let i = 0; i < 80 && game.state.phase !== "ended"; i += 1) {
+    await game.takeOneAction();
+  }
+  game.renderScoreboard();
+
+  assert.equal(game.state.phase, "ended");
+  assert.equal(game.state.result, "stalemate");
+  assert.equal(game.state.actionNumber, 40);
+  assert.equal(game.state.log.at(-1).text, "Stalemate: action limit reached.");
+  assert.equal(game.scoreboardEl.hidden, false);
+  assert.equal(game.scoreboardTitleEl.textContent, "Stalemate");
+  assert.equal(game.scoreboardGradeEl.textContent, "D");
 });
 
 test("sound toggle and volume control generated sound calls", () => {
@@ -552,7 +594,7 @@ test("step, pause, resolve, and scoreboard states still work", async () => {
 });
 
 for (const scenarioId of ["variety", "swarm"]) {
-  test(`${scenarioId} scenario still progresses to win/loss`, async () => {
+  test(`${scenarioId} scenario still resolves without hanging`, async () => {
     const game = loadGame();
     game.state.scenarioId = scenarioId;
     game.resetState();
@@ -566,6 +608,6 @@ for (const scenarioId of ["variety", "swarm"]) {
     }
 
     assert.equal(game.state.phase, "ended");
-    assert.match(game.state.result, /^(victory|defeat)$/);
+    assert.match(game.state.result, /^(victory|defeat|stalemate)$/);
   });
 }

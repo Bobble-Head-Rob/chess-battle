@@ -570,6 +570,10 @@ select:disabled {
   border-left-color: var(--enemy);
 }
 
+.scoreboard.stalemate {
+  border-left-color: #8a6d1d;
+}
+
 .scoreboard-header {
   display: flex;
   align-items: center;
@@ -606,6 +610,11 @@ select:disabled {
 .scoreboard.defeat .grade-badge {
   background: var(--enemy-soft);
   color: #982727;
+}
+
+.scoreboard.stalemate .grade-badge {
+  background: #fff7df;
+  color: #735b11;
 }
 
 .grade-badge strong {
@@ -649,6 +658,11 @@ select:disabled {
 .scoreboard.defeat #scoreboardResetButton {
   border-color: var(--enemy);
   background: var(--enemy);
+}
+
+.scoreboard.stalemate #scoreboardResetButton {
+  border-color: #8a6d1d;
+  background: #8a6d1d;
 }
 
 .speed-control,
