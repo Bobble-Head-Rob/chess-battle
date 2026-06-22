@@ -46,10 +46,14 @@ class FakeElement {
     this.checked = false;
     this.disabled = false;
     this.hidden = false;
+    this.parentNode = null;
   }
 
   set innerHTML(value) {
     this._innerHTML = value;
+    this.children.forEach((child) => {
+      child.parentNode = null;
+    });
     this.children = [];
   }
 
@@ -58,12 +62,25 @@ class FakeElement {
   }
 
   appendChild(child) {
+    child.parentNode = this;
     this.children.push(child);
     return child;
   }
 
   append(...children) {
     children.forEach((child) => this.appendChild(child));
+  }
+
+  removeChild(child) {
+    this.children = this.children.filter((item) => item !== child);
+    child.parentNode = null;
+    return child;
+  }
+
+  remove() {
+    if (this.parentNode) {
+      this.parentNode.removeChild(this);
+    }
   }
 
   addEventListener() {}
@@ -89,6 +106,7 @@ class FakeElement {
 function loadGame(options = {}) {
   const { stubAnimations = true, holdSleep = false } = options;
   const elements = new Map();
+  const timers = [];
   const document = {
     getElementById(id) {
       if (!elements.has(id)) {
@@ -108,10 +126,11 @@ function loadGame(options = {}) {
   const context = {
     console,
     document,
+    __timers: timers,
     window: {
-      setTimeout(callback) {
-        callback();
-        return 0;
+      setTimeout(callback, ms) {
+        timers.push({ callback, ms });
+        return timers.length;
       },
     },
   };
@@ -151,6 +170,8 @@ globalThis.__game = {
   scoreboardTitleEl,
   squareKey,
   resetState,
+  timers: globalThis.__timers,
+  runTimers: () => globalThis.__timers.splice(0).forEach((timer) => timer.callback()),
   finishSleep: () => globalThis.__finishSleep && globalThis.__finishSleep(),
 };
 `, context);
@@ -275,14 +296,22 @@ test("attack animation creates damage and kill effect nodes", async () => {
 
   const classes = Array.from(game.effectLayer.children, (child) => child.className);
   const damage = game.effectLayer.children.find((child) => child.className === "damage-number");
+  const ko = game.effectLayer.children.find((child) => child.className === "ko-burst");
 
   assert.equal(classes.some((className) => className.includes("hit-pulse")), true);
   assert.equal(classes.includes("damage-number"), true);
   assert.equal(classes.includes("ko-burst"), true);
   assert.equal(damage.textContent, "-1");
+  assert.equal(damage.style["--effect-duration"], "1050ms");
+  assert.equal(ko.style["--effect-duration"], "1350ms");
 
   game.finishSleep();
   await animation;
+
+  assert.deepEqual(Array.from(game.effectLayer.children, (child) => child.className), ["damage-number", "ko-burst"]);
+  assert.deepEqual(game.timers.map((timer) => timer.ms), [1050, 1350]);
+
+  game.runTimers();
 
   assert.equal(game.effectLayer.children.length, 0);
 });

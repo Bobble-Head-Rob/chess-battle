@@ -138,6 +138,12 @@ const SPEEDS = {
   fast: { loopDelay: 150, effect: 180 },
 };
 
+const FLOATING_FEEDBACK_DURATIONS = {
+  slow: { damage: 1500, ko: 1800 },
+  normal: { damage: 1050, ko: 1350 },
+  fast: { damage: 760, ko: 980 },
+};
+
 const MOVE_PROFILES = {
   pawn: { danger: 0.38, protection: 1.25, lane: 0 },
   knight: { danger: 0.76, protection: 0.8, lane: 0 },
@@ -257,6 +263,7 @@ function resetState() {
   state.ticks = 0;
   state.scoreSnapshot = null;
   state.log = [];
+  clearEffects();
   placeEnemyArmy();
   addLog(`Scenario ready: ${scenario.label}. Enemy deploys ${enemySummary(scenario)}. Player has ${scenario.budget} points to spend.`, "system");
   render();
@@ -1757,12 +1764,13 @@ async function animateAttack(actor, target, willKill) {
 
   const pulse = makePulse(to.x, to.y, actor.side, duration, "hit-pulse");
   effectLayer.appendChild(pulse);
-  effectLayer.appendChild(makeDamageNumber(to.x, to.y, actor.damage, duration));
+  const floatingDurations = floatingFeedbackDurations();
+  appendTemporaryEffect(makeDamageNumber(to.x, to.y, actor.damage, floatingDurations.damage), floatingDurations.damage);
   if (willKill) {
-    effectLayer.appendChild(makeKoBurst(to.x, to.y, duration));
+    appendTemporaryEffect(makeKoBurst(to.x, to.y, floatingDurations.ko), floatingDurations.ko);
   }
   await sleep(duration);
-  clearEffects();
+  clearTransientEffects();
 }
 
 async function animateKnight(actor, target, willKill, duration) {
@@ -1781,9 +1789,10 @@ async function animateKnight(actor, target, willKill, duration) {
   token.style.transform = "translate(-50%, -50%)";
   effectLayer.appendChild(token);
   effectLayer.appendChild(makePulse(to.x, to.y, actor.side, duration, "hit-pulse"));
-  effectLayer.appendChild(makeDamageNumber(to.x, to.y, actor.damage, duration));
+  const floatingDurations = floatingFeedbackDurations();
+  appendTemporaryEffect(makeDamageNumber(to.x, to.y, actor.damage, floatingDurations.damage), floatingDurations.damage);
   if (willKill) {
-    effectLayer.appendChild(makeKoBurst(to.x, to.y, duration));
+    appendTemporaryEffect(makeKoBurst(to.x, to.y, floatingDurations.ko), floatingDurations.ko);
   }
 
   const dx = to.x - from.x;
@@ -1807,7 +1816,7 @@ async function animateKnight(actor, target, willKill, duration) {
     fill: "forwards",
   });
   await animation.finished.catch(() => undefined);
-  clearEffects();
+  clearTransientEffects();
 }
 
 async function animateMove(actor, move) {
@@ -1821,7 +1830,7 @@ async function animateMove(actor, move) {
   const pulse = makePulse(to.x, to.y, actor.side, duration, "move-pulse");
   effectLayer.appendChild(pulse);
   await sleep(duration);
-  clearEffects();
+  clearTransientEffects();
 }
 
 function makePulse(x, y, side, duration, className) {
@@ -1851,6 +1860,38 @@ function makeKoBurst(x, y, duration) {
   burst.style.top = `${y}px`;
   burst.style.setProperty("--effect-duration", `${Math.max(240, duration)}ms`);
   return burst;
+}
+
+function floatingFeedbackDurations() {
+  return FLOATING_FEEDBACK_DURATIONS[state.speed] || FLOATING_FEEDBACK_DURATIONS.normal;
+}
+
+function appendTemporaryEffect(effect, duration) {
+  effectLayer.appendChild(effect);
+  window.setTimeout(() => removeEffectNode(effect), duration);
+}
+
+function clearTransientEffects() {
+  Array.from(effectLayer.children).forEach((effect) => {
+    if (isTransientEffect(effect)) {
+      removeEffectNode(effect);
+    }
+  });
+}
+
+function isTransientEffect(effect) {
+  const className = effect.className || "";
+  return ["attack-beam", "hit-pulse", "move-pulse", "hop-token"].some((name) => className.includes(name));
+}
+
+function removeEffectNode(effect) {
+  if (effect.parentNode) {
+    effect.parentNode.removeChild(effect);
+    return;
+  }
+  if (typeof effect.remove === "function") {
+    effect.remove();
+  }
 }
 
 function clearEffects() {
