@@ -65,6 +65,31 @@ const SCENARIOS = {
       { type: "pawn", row: 2, col: 9 },
     ],
   },
+  brokenCenter: {
+    label: "Broken Center",
+    boardSize: 8,
+    budget: 34,
+    playerDeployRows: 2,
+    enemyDeployRows: 2,
+    summary: "8x8 board · 34 budget · center four squares blocked · enemies: 4 pawns, 2 knights, 2 bishops, 1 rook",
+    blockedSquares: [
+      { row: 3, col: 3 },
+      { row: 3, col: 4 },
+      { row: 4, col: 3 },
+      { row: 4, col: 4 },
+    ],
+    enemies: [
+      { type: "bishop", row: 0, col: 1 },
+      { type: "rook", row: 0, col: 3 },
+      { type: "bishop", row: 0, col: 6 },
+      { type: "knight", row: 1, col: 1 },
+      { type: "pawn", row: 1, col: 2 },
+      { type: "pawn", row: 1, col: 3 },
+      { type: "pawn", row: 1, col: 4 },
+      { type: "pawn", row: 1, col: 5 },
+      { type: "knight", row: 1, col: 6 },
+    ],
+  },
 };
 
 const PIECES = {
@@ -229,11 +254,19 @@ function boardSize() {
 }
 
 function playerDeployStart() {
-  return boardSize() - 3;
+  return boardSize() - playerDeployRows();
 }
 
 function enemyDeployEnd() {
-  return 2;
+  return enemyDeployRows() - 1;
+}
+
+function playerDeployRows() {
+  return currentScenario().playerDeployRows || 3;
+}
+
+function enemyDeployRows() {
+  return currentScenario().enemyDeployRows || 3;
 }
 
 function createPiece(side, type, row, col) {
@@ -376,11 +409,17 @@ function renderBoard() {
       cell.dataset.row = String(row);
       cell.dataset.col = String(col);
       cell.setAttribute("aria-label", squareName(row, col));
+      const blocked = isBlockedSquare(row, col);
+      if (blocked) {
+        cell.classList.add("blocked-square");
+        cell.disabled = true;
+        cell.setAttribute("aria-label", `${squareName(row, col)} blocked`);
+      }
 
-      if (row >= playerDeployStart()) {
+      if (!blocked && row >= playerDeployStart()) {
         cell.classList.add("player-zone");
       }
-      if (row <= enemyDeployEnd()) {
+      if (!blocked && row <= enemyDeployEnd()) {
         cell.classList.add("enemy-zone");
       }
 
@@ -409,6 +448,13 @@ function renderBoard() {
       coord.className = "coord";
       coord.textContent = squareName(row, col);
       cell.appendChild(coord);
+
+      if (blocked) {
+        const obstacle = document.createElement("span");
+        obstacle.className = "obstacle-mark";
+        obstacle.setAttribute("aria-hidden", "true");
+        cell.appendChild(obstacle);
+      }
 
       const overlays = boardOverlays.get(squareKey(row, col)) || [];
       overlays.forEach((type) => {
@@ -703,6 +749,7 @@ function canPreviewPlacement(row, col) {
   return (
     state.phase === "setup" &&
     inBounds(row, col) &&
+    !isBlockedSquare(row, col) &&
     row >= playerDeployStart() &&
     !pieceAt(row, col) &&
     state.budget >= PIECES[state.selectedType].cost
@@ -807,7 +854,7 @@ function addCoverageOverlays(overlays, coverageMap, type) {
 }
 
 function addOverlay(overlays, row, col, type) {
-  if (!inBounds(row, col)) {
+  if (!inBounds(row, col) || isBlockedSquare(row, col)) {
     return;
   }
   const key = squareKey(row, col);
@@ -827,7 +874,7 @@ function attackRangeSquares(piece) {
       .map((dc) => ({ row: piece.row + forward, col: piece.col + dc }))
       .filter((square) => {
         const occupant = pieceAt(square.row, square.col);
-        return inBounds(square.row, square.col) && occupant && occupant.side !== piece.side;
+        return inBounds(square.row, square.col) && !isBlockedSquare(square.row, square.col) && occupant && occupant.side !== piece.side;
       });
   }
 
@@ -857,6 +904,9 @@ function attackRangeSquares(piece) {
     let row = piece.row + dr;
     let col = piece.col + dc;
     while (inBounds(row, col)) {
+      if (isBlockedSquare(row, col)) {
+        break;
+      }
       const occupant = pieceAt(row, col);
       if (occupant) {
         if (occupant.side !== piece.side) {
@@ -873,7 +923,7 @@ function attackRangeSquares(piece) {
 }
 
 function isOpenOrEnemy(piece, row, col) {
-  if (!inBounds(row, col)) {
+  if (!inBounds(row, col) || isBlockedSquare(row, col)) {
     return false;
   }
   const occupant = pieceAt(row, col);
@@ -935,7 +985,12 @@ function handleCellClick(row, col) {
 function placePlayerPiece(row, col) {
   const template = PIECES[state.selectedType];
   if (row < playerDeployStart()) {
-    addLog(`Player can only deploy in the bottom 3 rows. ${squareName(row, col)} is outside the blue zone.`, "system");
+    addLog(`Player can only deploy in the bottom ${playerDeployRows()} rows. ${squareName(row, col)} is outside the blue zone.`, "system");
+    render();
+    return;
+  }
+  if (isBlockedSquare(row, col)) {
+    addLog(`${squareName(row, col)} is blocked and cannot be used for deployment.`, "system");
     render();
     return;
   }
@@ -1391,6 +1446,9 @@ function visibleLineTargets(actor, row, col) {
     let nextRow = row + dr;
     let nextCol = col + dc;
     while (inBounds(nextRow, nextCol)) {
+      if (isBlockedSquare(nextRow, nextCol)) {
+        break;
+      }
       const occupant = pieceAt(nextRow, nextCol, new Set([actor.id]));
       if (occupant) {
         if (occupant.side !== actor.side && canAttackFrom(actor, row, col, occupant)) {
@@ -1482,6 +1540,9 @@ function openLineScore(actor, row, col) {
     let nextCol = col + dc;
     let openSquares = 0;
     while (inBounds(nextRow, nextCol)) {
+      if (isBlockedSquare(nextRow, nextCol)) {
+        break;
+      }
       const occupant = pieceAt(nextRow, nextCol, new Set([actor.id]));
       if (occupant) {
         if (occupant.side !== actor.side) {
@@ -1599,7 +1660,7 @@ function canThreatenSquare(attacker, row, col, ignoreIds = new Set()) {
 }
 
 function canAttackGeometry(actor, fromRow, fromCol, toRow, toCol, ignoreIds = new Set()) {
-  if (!inBounds(toRow, toCol) || (fromRow === toRow && fromCol === toCol)) {
+  if (!inBounds(toRow, toCol) || isBlockedSquare(toRow, toCol) || (fromRow === toRow && fromCol === toCol)) {
     return false;
   }
   const dr = toRow - fromRow;
@@ -1658,6 +1719,9 @@ function legalMoves(piece) {
     let row = piece.row + dr;
     let col = piece.col + dc;
     while (inBounds(row, col)) {
+      if (isBlockedSquare(row, col)) {
+        break;
+      }
       if (pieceAt(row, col)) {
         break;
       }
@@ -1742,7 +1806,7 @@ function isPathClear(fromRow, fromCol, toRow, toCol, ignoreIds = new Set()) {
   let row = fromRow + stepRow;
   let col = fromCol + stepCol;
   while (row !== toRow || col !== toCol) {
-    if (pieceAt(row, col, ignoreIds)) {
+    if (isBlockedSquare(row, col) || pieceAt(row, col, ignoreIds)) {
       return false;
     }
     row += stepRow;
@@ -1752,11 +1816,15 @@ function isPathClear(fromRow, fromCol, toRow, toCol, ignoreIds = new Set()) {
 }
 
 function isOpen(row, col) {
-  return inBounds(row, col) && !pieceAt(row, col);
+  return inBounds(row, col) && !isBlockedSquare(row, col) && !pieceAt(row, col);
 }
 
 function inBounds(row, col) {
   return row >= 0 && row < boardSize() && col >= 0 && col < boardSize();
+}
+
+function isBlockedSquare(row, col) {
+  return Boolean(currentScenario().blockedSquares?.some((square) => square.row === row && square.col === col));
 }
 
 function pieceAt(row, col, ignoreIds = new Set()) {

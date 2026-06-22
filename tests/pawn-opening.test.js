@@ -249,13 +249,17 @@ globalThis.__game = {
   activeOverlayPiece,
   activeBoardInspection,
   placementPreviewPiece,
+  canPreviewPlacement,
   buildBoardOverlays,
+  renderBoard,
   legalMoves,
   chooseMove,
   decideAction,
   canAttack,
   canAttackFrom,
   canThreatenSquare,
+  isBlockedSquare,
+  placePlayerPiece,
   shouldPenalizeImmediateReturn,
   playSound,
   updateMasterVolume,
@@ -274,6 +278,7 @@ globalThis.__game = {
   scoreboardEl,
   scoreboardTitleEl,
   scoreboardGradeEl,
+  boardEl,
   soundToggleEl,
   soundVolumeEl,
   squareKey,
@@ -509,6 +514,75 @@ test("queen avoids dangerous future-attack square when safer strong square exist
   assert.equal(game.canAttackFrom(guard, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
 });
 
+test("broken center blocked squares render as unusable cells", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+
+  game.renderBoard();
+
+  const blockedCells = game.boardEl.children.filter((cell) => cell.classList.contains("blocked-square"));
+  assert.equal(blockedCells.length, 4);
+  assert.deepEqual(
+    blockedCells.map((cell) => `${cell.dataset.row},${cell.dataset.col}`).sort(),
+    ["3,3", "3,4", "4,3", "4,4"]
+  );
+});
+
+test("player cannot place on blocked squares", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+  game.state.phase = "setup";
+  game.SCENARIOS.brokenCenter.blockedSquares.push({ row: 6, col: 4 });
+
+  game.placePlayerPiece(6, 4);
+
+  assert.equal(game.canPreviewPlacement(6, 4), false);
+  assert.equal(game.state.pieces.length, 0);
+  assert.equal(game.state.budget, 99);
+  assert.match(game.state.log.at(-1).text, /blocked/);
+});
+
+test("pieces cannot move into blocked squares", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+  const king = addPiece(game, "player", "king", 5, 3);
+
+  assert.equal(game.isBlockedSquare(4, 3), true);
+  assert.equal(coords(game.legalMoves(king)).includes("4,3"), false);
+});
+
+test("ranged attacks do not pass through blocked squares", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+  const rook = addPiece(game, "player", "rook", 6, 3);
+  const target = addPiece(game, "enemy", "king", 2, 3);
+
+  assert.equal(game.canAttack(rook, target), false);
+});
+
+test("knights jump over blocked squares but cannot land on or target them", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+  const knight = addPiece(game, "player", "knight", 5, 2);
+  const target = addPiece(game, "enemy", "pawn", 3, 1);
+
+  assert.equal(game.canAttack(knight, target), true);
+  assert.equal(game.canAttackFrom(knight, 5, 2, { side: "enemy", row: 3, col: 3 }), false);
+  assert.equal(coords(game.legalMoves(knight)).includes("3,3"), false);
+});
+
+test("placement preview and overlays respect blocked center squares", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+  game.state.phase = "setup";
+  game.state.selectedType = "rook";
+  game.SCENARIOS.brokenCenter.blockedSquares.push({ row: 6, col: 4 });
+  game.state.previewPlacementSquare = { row: 6, col: 4 };
+
+  assert.equal(game.placementPreviewPiece(), null);
+  assert.equal(game.buildBoardOverlays().has(game.squareKey(6, 4)), false);
+});
+
 test("reset clears stale hover and selected inspection state", () => {
   const game = loadGame();
   emptyBoard(game);
@@ -643,7 +717,7 @@ test("step, pause, resolve, and scoreboard states still work", async () => {
   assert.equal(game.scoreboardTitleEl.textContent, "Victory");
 });
 
-for (const scenarioId of ["variety", "swarm"]) {
+for (const scenarioId of ["variety", "swarm", "brokenCenter"]) {
   test(`${scenarioId} scenario still resolves without hanging`, async () => {
     const game = loadGame();
     game.state.scenarioId = scenarioId;
