@@ -488,6 +488,26 @@ test("rook prefers a move creating straight-line attack potential", () => {
   assert.equal(game.canAttackFrom(rook, move.row, move.col, target), true);
 });
 
+test("rook speed is tuned upward for more active lane control", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const rook = addPiece(game, "player", "rook", 8, 4);
+
+  assert.equal(rook.speed, 1.5);
+});
+
+test("rook attacks a clean visible lane target instead of moving", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const rook = addPiece(game, "player", "rook", 8, 4);
+  const target = addPiece(game, "enemy", "bishop", 8, 8);
+
+  const action = game.decideAction(rook);
+
+  assert.equal(action.kind, "attack");
+  assert.equal(action.target, target);
+});
+
 test("rook avoids pawn diagonal threat when safe lane options exist", () => {
   const game = loadGame();
   emptyBoard(game);

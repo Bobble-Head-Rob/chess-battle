@@ -126,7 +126,7 @@ const PIECES = {
     cost: 5,
     hp: 4,
     damage: 2,
-    speed: 1,
+    speed: 1.5,
     role: "ranged",
   },
   queen: {
