@@ -740,6 +740,10 @@ select:disabled {
   outline-color: rgba(217, 67, 67, 0.75);
 }
 
+.cell.valid-deploy.placement-preview:hover::before {
+  content: none;
+}
+
 .coord {
   position: absolute;
   top: 2px;
