@@ -124,7 +124,7 @@ const PIECES = {
 };
 
 const PIECE_ROLES = {
-  pawn: "Moves forward, attacks diagonally.",
+  pawn: "Opens with a two-square advance, then moves forward and attacks diagonally.",
   knight: "L-shape skirmisher; returns if target survives.",
   bishop: "Diagonal ranged attacker.",
   rook: "Straight-line ranged attacker.",
@@ -234,6 +234,8 @@ function createPiece(side, type, row, col) {
     damage: template.damage,
     speed: template.speed,
     initiative: 0,
+    hasMoved: false,
+    openingActionUsed: false,
   };
 }
 
@@ -687,6 +689,8 @@ function createVirtualPiece(side, type, row, col) {
     damage: template.damage,
     speed: template.speed,
     initiative: 0,
+    hasMoved: false,
+    openingActionUsed: false,
   };
 }
 
@@ -901,6 +905,7 @@ function startBattle() {
   }
   if (state.phase === "setup") {
     captureScoreSnapshot();
+    prepareOpeningInitiative();
     state.phase = "running";
     state.previewPlacementSquare = null;
     addLog("Battle begins. Initiative ticks until the first unit reaches 10.", "system");
@@ -933,6 +938,7 @@ async function stepOneAction() {
   }
   if (state.phase === "setup") {
     captureScoreSnapshot();
+    prepareOpeningInitiative();
     state.phase = "paused";
     state.previewPlacementSquare = null;
     addLog("Battle begins in step mode.", "system");
@@ -989,6 +995,8 @@ async function takeOneAction() {
   render();
   await sleep(Math.min(140, SPEEDS[state.speed].effect / 3));
 
+  const actionStart = { row: actor.row, col: actor.col };
+  const openingAction = isPawnOpeningAction(actor);
   const action = decideAction(actor);
   actor.initiative = Math.max(0, actor.initiative - ACTION_THRESHOLD);
 
@@ -999,6 +1007,7 @@ async function takeOneAction() {
   } else {
     addActionLog(`${pieceName(actor)} from ${squareName(actor.row, actor.col)} holds. No useful move or attack is available.`);
   }
+  markActionUsed(actor, actionStart, openingAction);
 
   state.activeId = null;
   state.destination = null;
@@ -1036,6 +1045,14 @@ function compareInitiative(a, b) {
     return b.speed - a.speed;
   }
   return a.id - b.id;
+}
+
+function prepareOpeningInitiative() {
+  state.pieces.forEach((piece) => {
+    if (isPawnOpeningAction(piece)) {
+      piece.initiative = Math.max(piece.initiative, ACTION_THRESHOLD);
+    }
+  });
 }
 
 function decideAction(actor) {
@@ -1298,7 +1315,24 @@ async function resolveMove(actor, move, reason) {
   await animateMove(actor, move);
   actor.row = move.row;
   actor.col = move.col;
+  if (actor.type === "pawn" && isPawnOpeningAction(actor)) {
+    const squares = Math.abs(move.row - from.row);
+    addActionLog(`${pieceName(actor)} from ${squareName(from.row, from.col)} advances ${squares === 2 ? "two squares" : "one square"} to ${squareName(move.row, move.col)}.`);
+    return;
+  }
   addActionLog(`${pieceName(actor)} from ${squareName(from.row, from.col)} moves to ${squareName(move.row, move.col)}, ${reason}.`);
+}
+
+function markActionUsed(actor, actionStart, openingAction) {
+  if (actor.type !== "pawn") {
+    return;
+  }
+  if (actor.row !== actionStart.row || actor.col !== actionStart.col) {
+    actor.hasMoved = true;
+  }
+  if (openingAction) {
+    actor.openingActionUsed = true;
+  }
 }
 
 function shouldMoveIntoTarget(actor) {
@@ -1366,8 +1400,7 @@ function canAttackGeometry(actor, fromRow, fromCol, toRow, toCol, ignoreIds = ne
 
 function legalMoves(piece) {
   if (piece.type === "pawn") {
-    const move = { row: piece.row + pawnForward(piece.side), col: piece.col };
-    return isOpen(move.row, move.col) ? [move] : [];
+    return pawnLegalMoves(piece);
   }
   if (piece.type === "king") {
     return surroundingDirections().map(([dr, dc]) => ({ row: piece.row + dr, col: piece.col + dc })).filter((move) => isOpen(move.row, move.col));
@@ -1400,6 +1433,27 @@ function legalMoves(piece) {
     }
   });
   return moves;
+}
+
+function pawnLegalMoves(piece) {
+  const forward = pawnForward(piece.side);
+  const first = { row: piece.row + forward, col: piece.col };
+  if (!isOpen(first.row, first.col)) {
+    return [];
+  }
+
+  const moves = [first];
+  if (isPawnOpeningAction(piece)) {
+    const second = { row: piece.row + forward * 2, col: piece.col };
+    if (isOpen(second.row, second.col)) {
+      moves.push(second);
+    }
+  }
+  return moves;
+}
+
+function isPawnOpeningAction(piece) {
+  return piece.type === "pawn" && !piece.hasMoved && !piece.openingActionUsed;
 }
 
 function hasAnyLineFrom(actor, row, col) {
