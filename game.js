@@ -193,7 +193,8 @@ const state = {
   result: null,
   speed: "normal",
   activeId: null,
-  inspectedId: null,
+  hoverInspectPieceId: null,
+  selectedInspectPieceId: null,
   previewPlacementSquare: null,
   overlays: {
     moves: true,
@@ -253,7 +254,7 @@ function resetState() {
   state.phase = "setup";
   state.result = null;
   state.activeId = null;
-  state.inspectedId = null;
+  clearInspectState();
   state.previewPlacementSquare = null;
   state.destination = null;
   state.actionBusy = false;
@@ -341,7 +342,7 @@ function renderShop() {
     button.append(symbol, label, cost);
     button.addEventListener("click", () => {
       state.selectedType = type;
-      state.inspectedId = null;
+      clearInspectState();
       state.previewPlacementSquare = null;
       render();
     });
@@ -418,8 +419,10 @@ function renderBoard() {
       if (occupyingPiece) {
         cell.dataset.pieceId = String(occupyingPiece.id);
         cell.appendChild(renderPiece(occupyingPiece));
-        cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id));
-        cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id));
+        cell.addEventListener("mouseenter", () => inspectPiece(occupyingPiece.id, "hover"));
+        cell.addEventListener("focus", () => inspectPiece(occupyingPiece.id, "hover"));
+        cell.addEventListener("mouseleave", () => clearHoverInspection(occupyingPiece.id));
+        cell.addEventListener("blur", () => clearHoverInspection(occupyingPiece.id));
       }
 
       if (validPlacementPreview) {
@@ -519,17 +522,16 @@ function renderOverlayControls() {
 }
 
 function renderInspectPanel() {
+  pruneMissingInspectState();
   const piece = inspectedPiece();
   inspectDetailsEl.innerHTML = "";
 
   if (placementPreviewPiece()) {
-    state.inspectedId = null;
     renderPlacementInspect();
     return;
   }
 
   if (!piece && state.phase === "setup") {
-    state.inspectedId = null;
     renderPlacementInspect();
     return;
   }
@@ -539,7 +541,6 @@ function renderInspectPanel() {
   inspectDetailsEl.innerHTML = "";
 
   if (!piece) {
-    state.inspectedId = null;
     inspectHintEl.textContent = "Hover or click a piece on the board to inspect its stats.";
     return;
   }
@@ -626,13 +627,33 @@ function renderPlacementInspect() {
   inspectDetailsEl.append(title, stats, role, hint);
 }
 
-function inspectPiece(pieceId, refreshBoard = true) {
-  const alreadyInspected = state.inspectedId === pieceId;
+function inspectPiece(pieceId, source = "hover", refreshBoard = true) {
+  const alreadyInspected = activeBoardInspection()?.id === pieceId;
   state.previewPlacementSquare = null;
-  state.inspectedId = pieceId;
+  if (source === "selected") {
+    state.selectedInspectPieceId = pieceId;
+    state.hoverInspectPieceId = null;
+  } else if (!selectedInspectPiece()) {
+    state.hoverInspectPieceId = pieceId;
+  }
   renderOverlayControls();
   renderInspectPanel();
   if (refreshBoard && !alreadyInspected) {
+    renderBoard();
+  } else {
+    markInspectedCell();
+  }
+}
+
+function clearHoverInspection(pieceId = null, refreshBoard = true) {
+  if (!state.hoverInspectPieceId || (pieceId !== null && state.hoverInspectPieceId !== pieceId)) {
+    return;
+  }
+  const hadBoardInspection = Boolean(activeBoardInspection());
+  state.hoverInspectPieceId = null;
+  renderOverlayControls();
+  renderInspectPanel();
+  if (refreshBoard && hadBoardInspection && !activeBoardInspection()) {
     renderBoard();
   } else {
     markInspectedCell();
@@ -650,11 +671,11 @@ function setPlacementPreview(row, col) {
   if (!canPreviewPlacement(row, col)) {
     return;
   }
-  if (state.previewPlacementSquare?.row === row && state.previewPlacementSquare?.col === col && !state.inspectedId) {
+  if (state.previewPlacementSquare?.row === row && state.previewPlacementSquare?.col === col && !inspectedPiece()) {
     return;
   }
   state.previewPlacementSquare = { row, col };
-  state.inspectedId = null;
+  state.hoverInspectPieceId = null;
   render();
 }
 
@@ -702,7 +723,29 @@ function createVirtualPiece(side, type, row, col) {
 }
 
 function inspectedPiece() {
-  return state.inspectedId ? state.pieces.find((item) => item.id === state.inspectedId) || null : null;
+  return selectedInspectPiece() || hoverInspectPiece();
+}
+
+function selectedInspectPiece() {
+  return state.selectedInspectPieceId ? state.pieces.find((item) => item.id === state.selectedInspectPieceId) || null : null;
+}
+
+function hoverInspectPiece() {
+  return state.hoverInspectPieceId ? state.pieces.find((item) => item.id === state.hoverInspectPieceId) || null : null;
+}
+
+function pruneMissingInspectState() {
+  if (state.selectedInspectPieceId && !selectedInspectPiece()) {
+    state.selectedInspectPieceId = null;
+  }
+  if (state.hoverInspectPieceId && !hoverInspectPiece()) {
+    state.hoverInspectPieceId = null;
+  }
+}
+
+function clearInspectState() {
+  state.hoverInspectPieceId = null;
+  state.selectedInspectPieceId = null;
 }
 
 function activeBoardInspection() {
@@ -865,7 +908,7 @@ function appendLogText(line, text) {
 function handleCellClick(row, col) {
   const occupyingPiece = pieceAt(row, col);
   if (occupyingPiece) {
-    inspectPiece(occupyingPiece.id);
+    inspectPiece(occupyingPiece.id, "selected");
     return;
   }
   if (state.phase !== "setup") {
@@ -894,7 +937,7 @@ function placePlayerPiece(row, col) {
   state.budget -= template.cost;
   const piece = createPiece("player", state.selectedType, row, col);
   state.pieces.push(piece);
-  state.inspectedId = null;
+  clearInspectState();
   state.previewPlacementSquare = null;
   addLog(`Player ${template.label} deployed on ${squareName(row, col)} for ${template.cost}.`, "system");
   render();
@@ -909,9 +952,7 @@ function removePlayerPiece(row, col) {
     return;
   }
   state.pieces = state.pieces.filter((item) => item.id !== piece.id);
-  if (state.inspectedId === piece.id) {
-    state.inspectedId = null;
-  }
+  pruneMissingInspectState();
   state.budget += PIECES[piece.type].cost;
   addLog(`Player ${PIECES[piece.type].label} removed from ${squareName(row, col)}. Refunded ${PIECES[piece.type].cost}.`, "system");
   render();
@@ -938,6 +979,7 @@ function startBattle() {
     prepareOpeningInitiative();
     state.phase = "running";
     state.previewPlacementSquare = null;
+    clearInspectState();
     addLog("Battle begins. Initiative ticks until the first unit reaches 10.", "system");
   } else if (state.phase === "paused") {
     state.phase = "running";
@@ -971,6 +1013,7 @@ async function stepOneAction() {
     prepareOpeningInitiative();
     state.phase = "paused";
     state.previewPlacementSquare = null;
+    clearInspectState();
     addLog("Battle begins in step mode.", "system");
   } else if (state.phase === "running") {
     state.phase = "paused";

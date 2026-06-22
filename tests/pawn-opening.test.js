@@ -151,6 +151,10 @@ globalThis.__game = {
   SCENARIOS,
   state,
   createPiece,
+  inspectPiece,
+  clearHoverInspection,
+  activeOverlayPiece,
+  activeBoardInspection,
   placementPreviewPiece,
   buildBoardOverlays,
   legalMoves,
@@ -166,6 +170,9 @@ globalThis.__game = {
   togglePause,
   takeOneAction,
   renderScoreboard,
+  renderInspectPanel,
+  inspectHintEl,
+  inspectDetailsEl,
   scoreboardEl,
   scoreboardTitleEl,
   squareKey,
@@ -187,6 +194,8 @@ function emptyBoard(game, scenarioId = "variety") {
   game.state.budget = 99;
   game.state.selectedType = "pawn";
   game.state.previewPlacementSquare = null;
+  game.state.hoverInspectPieceId = null;
+  game.state.selectedInspectPieceId = null;
   game.state.activeId = null;
   game.state.destination = null;
   game.state.actionBusy = false;
@@ -283,6 +292,70 @@ test("placement preview exposes the pawn opening move overlay", () => {
 
   assert.deepEqual(coords(game.legalMoves(preview)), ["7,4", "6,4"]);
   assert.equal(overlays.get(game.squareKey(6, 4)).includes("move"), true);
+});
+
+test("hover inspection shows and clears overlays when leaving a piece", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const piece = addPiece(game, "player", "knight", 8, 4);
+
+  game.inspectPiece(piece.id, "hover", false);
+
+  assert.equal(game.state.hoverInspectPieceId, piece.id);
+  assert.equal(game.activeOverlayPiece(), piece);
+  assert.equal(game.activeBoardInspection(), piece);
+  assert.equal(game.inspectHintEl.hidden, true);
+
+  game.clearHoverInspection(piece.id, false);
+
+  assert.equal(game.state.hoverInspectPieceId, null);
+  assert.equal(game.activeOverlayPiece(), null);
+  assert.equal(game.activeBoardInspection(), null);
+  assert.equal(game.inspectHintEl.hidden, false);
+});
+
+test("setup hover clear falls back to selected shop piece info", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  game.state.phase = "setup";
+  game.state.selectedType = "knight";
+  const piece = addPiece(game, "enemy", "pawn", 1, 4);
+
+  game.inspectPiece(piece.id, "hover", false);
+  game.clearHoverInspection(piece.id, false);
+
+  const title = game.inspectDetailsEl.children[0];
+  assert.equal(game.inspectHintEl.hidden, true);
+  assert.equal(title.children[1].textContent, "Placing: Knight");
+});
+
+test("clicked inspection remains selected after hover leaves another piece", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const selected = addPiece(game, "player", "king", 8, 4);
+  const hovered = addPiece(game, "enemy", "pawn", 1, 4);
+
+  game.inspectPiece(selected.id, "selected", false);
+  game.inspectPiece(hovered.id, "hover", false);
+  game.clearHoverInspection(hovered.id, false);
+
+  assert.equal(game.state.selectedInspectPieceId, selected.id);
+  assert.equal(game.activeOverlayPiece(), selected);
+  assert.equal(game.activeBoardInspection(), selected);
+});
+
+test("reset clears stale hover and selected inspection state", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const selected = addPiece(game, "player", "king", 8, 4);
+  const hovered = addPiece(game, "enemy", "pawn", 1, 4);
+  game.state.selectedInspectPieceId = selected.id;
+  game.state.hoverInspectPieceId = hovered.id;
+
+  game.resetState();
+
+  assert.equal(game.state.selectedInspectPieceId, null);
+  assert.equal(game.state.hoverInspectPieceId, null);
 });
 
 test("attack animation creates damage and kill effect nodes", async () => {
