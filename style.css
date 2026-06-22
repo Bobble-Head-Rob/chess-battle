@@ -960,8 +960,8 @@ select:disabled {
 .hit-pulse,
 .move-pulse {
   position: absolute;
-  width: 16%;
-  height: 16%;
+  width: 13%;
+  height: 13%;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   opacity: 0;
@@ -970,14 +970,14 @@ select:disabled {
 
 .hit-pulse.player,
 .move-pulse.player {
-  border: 4px solid var(--player);
-  background: rgba(31, 120, 209, 0.18);
+  border: 3px solid var(--player);
+  background: rgba(31, 120, 209, 0.16);
 }
 
 .hit-pulse.enemy,
 .move-pulse.enemy {
-  border: 4px solid var(--enemy);
-  background: rgba(217, 67, 67, 0.18);
+  border: 3px solid var(--enemy);
+  background: rgba(217, 67, 67, 0.16);
 }
 
 .damage-number {
@@ -1063,11 +1063,11 @@ select:disabled {
     transform: translate(-50%, -50%) scale(0.3);
   }
   30% {
-    opacity: 1;
+    opacity: 0.9;
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(1.7);
+    transform: translate(-50%, -50%) scale(1.35);
   }
 }
 
