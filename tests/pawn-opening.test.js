@@ -253,6 +253,7 @@ globalThis.__game = {
   canPreviewPlacement,
   buildBoardOverlays,
   renderBoard,
+  renderPiece,
   legalMoves,
   chooseMove,
   decideAction,
@@ -263,6 +264,7 @@ globalThis.__game = {
   canThreatenSquare,
   isBlockedSquare,
   placePlayerPiece,
+  initiativeReadinessPercent,
   shouldPenalizeImmediateReturn,
   playSound,
   updateMasterVolume,
@@ -325,6 +327,19 @@ function addPiece(game, side, type, row, col) {
 
 function coords(moves) {
   return Array.from(moves, (move) => `${move.row},${move.col}`);
+}
+
+function findByClass(root, className) {
+  if ((root.className || "").split(/\s+/).includes(className)) {
+    return root;
+  }
+  for (const child of root.children || []) {
+    const found = findByClass(child, className);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
 }
 
 test("pawns can move two squares on their first action when both squares are clear", () => {
@@ -390,6 +405,71 @@ test("opening pawns get initiative before non-pawn pieces and player wins pawn t
 
   assert.equal(playerPawn.initiative, game.ACTION_THRESHOLD);
   assert.equal(game.chooseNextActor(), playerPawn);
+});
+
+test("initiative readiness percentage is clamped", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const piece = addPiece(game, "player", "rook", 8, 4);
+
+  piece.initiative = -2;
+  assert.equal(game.initiativeReadinessPercent(piece), 0);
+
+  piece.initiative = 15;
+  assert.equal(game.initiativeReadinessPercent(piece), 100);
+});
+
+test("fractional initiative renders as a fractional bar fill", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const piece = addPiece(game, "player", "rook", 8, 4);
+  piece.initiative = 7.5;
+
+  const pieceEl = game.renderPiece(piece);
+  const fill = findByClass(pieceEl, "initiative-fill");
+
+  assert.equal(game.initiativeReadinessPercent(piece), 75);
+  assert.equal(fill.style.width, "75%");
+});
+
+test("ready pieces render a full initiative bar", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const piece = addPiece(game, "enemy", "knight", 1, 4);
+  piece.initiative = game.ACTION_THRESHOLD;
+
+  const pieceEl = game.renderPiece(piece);
+  const bar = findByClass(pieceEl, "initiative-bar");
+  const fill = findByClass(pieceEl, "initiative-fill");
+
+  assert.equal(bar.className.includes("ready"), true);
+  assert.equal(fill.style.width, "100%");
+});
+
+test("dead pieces do not render initiative bars", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const piece = addPiece(game, "enemy", "pawn", 1, 4);
+  piece.hp = 0;
+  piece.initiative = game.ACTION_THRESHOLD;
+
+  const pieceEl = game.renderPiece(piece);
+
+  assert.equal(findByClass(pieceEl, "initiative-bar"), null);
+});
+
+test("inspect panel shows initiative threshold and readiness", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const piece = addPiece(game, "player", "rook", 8, 4);
+  piece.initiative = 7.5;
+
+  game.inspectPiece(piece.id, "selected", false);
+
+  const stats = game.inspectDetailsEl.children[1];
+  const values = Object.fromEntries(stats.children.map((item) => [item.children[0].textContent, item.children[1].textContent]));
+  assert.equal(values.Initiative, "7.5 / 10");
+  assert.equal(values.Readiness, "75%");
 });
 
 test("placement preview exposes the pawn opening move overlay", () => {

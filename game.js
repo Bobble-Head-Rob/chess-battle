@@ -502,7 +502,7 @@ function renderPiece(piece) {
   const template = PIECES[piece.type];
   const pieceEl = document.createElement("div");
   pieceEl.className = `piece ${piece.side} ${piece.type}`;
-  pieceEl.title = `${sideName(piece.side)} ${template.label}: ${piece.hp}/${piece.maxHp} HP, ${piece.initiative} initiative`;
+  pieceEl.title = `${sideName(piece.side)} ${template.label}: ${piece.hp}/${piece.maxHp} HP, ${formatNumber(piece.initiative)}/${ACTION_THRESHOLD} initiative`;
 
   const symbol = document.createElement("span");
   symbol.className = "piece-symbol";
@@ -520,16 +520,33 @@ function renderPiece(piece) {
   hpValue.className = "hp-value";
   hpValue.textContent = `${piece.hp}/${piece.maxHp}`;
   hpText.append(hpHeart, hpValue);
-  const hpBar = document.createElement("span");
-  hpBar.className = "hp-bar";
-  const hpFill = document.createElement("span");
-  hpFill.className = "hp-fill";
-  hpFill.style.width = `${Math.max(0, (piece.hp / piece.maxHp) * 100)}%`;
-  hpBar.appendChild(hpFill);
-  hpWrap.append(hpText, hpBar);
+  hpWrap.appendChild(hpText);
+
+  if (piece.hp > 0) {
+    const initiativeBar = document.createElement("span");
+    const readiness = initiativeReadinessPercent(piece);
+    initiativeBar.className = `initiative-bar${readiness >= 100 ? " ready" : readiness >= 75 ? " near-ready" : ""}`;
+    initiativeBar.setAttribute("aria-label", `Initiative ${readiness}%`);
+    const initiativeFill = document.createElement("span");
+    initiativeFill.className = "initiative-fill";
+    initiativeFill.style.width = `${readiness}%`;
+    initiativeBar.appendChild(initiativeFill);
+    hpWrap.appendChild(initiativeBar);
+  }
 
   pieceEl.append(symbol, hpWrap);
   return pieceEl;
+}
+
+function initiativeReadinessPercent(piece) {
+  if (!piece || !Number.isFinite(piece.initiative)) {
+    return 0;
+  }
+  return Math.round(Math.max(0, Math.min(1, piece.initiative / ACTION_THRESHOLD)) * 100);
+}
+
+function formatNumber(value) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
 }
 
 function renderStatus() {
@@ -625,7 +642,8 @@ function renderBoardPieceInspect(piece) {
     ["HP", `${piece.hp}/${piece.maxHp}`],
     ["Damage", String(piece.damage)],
     ["Speed", String(piece.speed)],
-    ["Initiative", String(piece.initiative)],
+    ["Initiative", `${formatNumber(piece.initiative)} / ${ACTION_THRESHOLD}`],
+    ["Readiness", `${initiativeReadinessPercent(piece)}%`],
     ["Cost / Value", String(template.cost)],
   ].forEach(([label, value]) => {
     const item = document.createElement("div");
