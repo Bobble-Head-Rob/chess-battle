@@ -419,6 +419,45 @@ test("initiative readiness percentage is clamped", () => {
   assert.equal(game.initiativeReadinessPercent(piece), 100);
 });
 
+test("initiative overflow is preserved after acting", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const knight = addPiece(game, "player", "knight", 8, 0);
+  addPiece(game, "enemy", "king", 0, 7);
+
+  await game.takeOneAction();
+
+  assert.equal(knight.initiative, 2);
+});
+
+test("speed three initiative follows the expected overflow sequence", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const knight = addPiece(game, "player", "knight", 8, 0);
+  addPiece(game, "enemy", "king", 0, 7);
+
+  await game.takeOneAction();
+  assert.equal(knight.initiative, 2);
+
+  await game.takeOneAction();
+  assert.equal(knight.initiative, 1);
+
+  await game.takeOneAction();
+  assert.equal(knight.initiative, 0);
+});
+
+test("fractional speed initiative accumulates and keeps overflow", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const rook = addPiece(game, "player", "rook", 8, 0);
+  addPiece(game, "enemy", "king", 0, 7);
+
+  await game.takeOneAction();
+
+  assert.equal(rook.speed, 1.5);
+  assert.equal(rook.initiative, 0.5);
+});
+
 test("fractional initiative renders as a fractional bar fill", () => {
   const game = loadGame();
   emptyBoard(game);
