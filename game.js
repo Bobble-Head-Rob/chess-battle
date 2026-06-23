@@ -1273,6 +1273,7 @@ function chooseMove(actor) {
     moveScore += scoreTeamworkAndBlocking(actor, move.row, move.col, safety);
     moveScore += scoreRookLaneDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore);
     moveScore += scoreBishopDiagonalDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore);
+    moveScore += scoreQueenFlexiblePressure(actor, move, safety, futureAttack, laneScore, currentLaneScore);
 
     let bestTargetScore = -Infinity;
     targets.forEach((target) => {
@@ -1282,7 +1283,7 @@ function chooseMove(actor) {
 
       if (toDistance < fromDistance) {
         score += (fromDistance - toDistance) * 16;
-        if (actor.type !== "rook" && actor.type !== "bishop") {
+        if (actor.type !== "rook" && actor.type !== "bishop" && actor.type !== "queen") {
           useful = true;
         }
       }
@@ -1414,13 +1415,13 @@ function scoreSquareSafety(actor, square, coverage) {
 
 function scoreMoveSafety(actor, move, coverage) {
   const safety = scoreSquareSafety(actor, move, coverage);
-  if (actor.type !== "rook" && actor.type !== "bishop") {
+  if (actor.type !== "rook" && actor.type !== "bishop" && actor.type !== "queen") {
     return safety;
   }
 
-  // Rooks and bishops are valuable lane controllers, so pawn and knight
+  // Rooks, bishops, and queens are valuable lane controllers, so pawn and knight
   // coverage should matter more than it does for disposable front-line pieces.
-  const controllerPenalty = actor.type === "rook" ? scoreRookDangerPenalty(actor, move, safety) : scoreBishopDangerPenalty(actor, move, safety);
+  const controllerPenalty = scoreLaneControllerDangerPenalty(actor, move, safety);
   return {
     ...safety,
     penalty: safety.penalty + controllerPenalty,
@@ -1449,6 +1450,7 @@ function scoreFutureAttackPotential(actor, row, col, targets) {
 }
 
 function futureAttackRoleBonus(actor) {
+  if (actor.type === "queen") return 155;
   if (PIECES[actor.type].role === "ranged") return 120;
   if (actor.type === "knight") return 104;
   if (actor.type === "king") return 82;
@@ -1466,6 +1468,9 @@ function scoreLanePotential(actor, row, col, targets) {
   if (actor.type === "bishop") {
     return scoreBishopDiagonalPotential(actor, row, col, targets);
   }
+  if (actor.type === "queen") {
+    return scoreQueenLanePotential(actor, row, col, targets);
+  }
 
   const openLine = openLineScore(actor, row, col) * MOVE_PROFILES[actor.type].lane * 0.75;
   const visibleTargetScore = visibleLineTargets(actor, row, col).reduce((score, target) => score + targetScore(actor, target) * 0.28, 0);
@@ -1480,7 +1485,23 @@ function isUsefulLaneMove(actor, laneScore, currentLaneScore, futureAttack) {
   if (actor.type === "bishop") {
     return isBishopDiagonalImprovement(laneScore, currentLaneScore, futureAttack);
   }
+  if (actor.type === "queen") {
+    return isQueenLaneImprovement(laneScore, currentLaneScore, futureAttack);
+  }
   return true;
+}
+
+function scoreLaneControllerDangerPenalty(actor, move, safety) {
+  if (actor.type === "rook") {
+    return scoreRookDangerPenalty(actor, move, safety);
+  }
+  if (actor.type === "bishop") {
+    return scoreBishopDangerPenalty(actor, move, safety);
+  }
+  if (actor.type === "queen") {
+    return scoreQueenDangerPenalty(actor, move, safety);
+  }
+  return 0;
 }
 
 function scoreRookLanePotential(actor, row, col, targets) {
@@ -1631,6 +1652,97 @@ function scoreBishopDangerPenalty(actor, move, safety) {
     penalty = Math.max(0, penalty - Math.min(36, safety.protection.attackers * 12 + safety.protection.damage * 3));
   }
   return penalty;
+}
+
+function scoreQueenLanePotential(actor, row, col, targets) {
+  const visibleTargets = visibleLineTargets(actor, row, col);
+  const lineCount = countUsefulLineDirections(actor, row, col);
+  const openFlex = openLineScore(actor, row, col) * MOVE_PROFILES.queen.lane * 0.48;
+  const visibleTargetScore = visibleTargets.reduce((score, target) => score + targetScore(actor, target) * 0.34, 0);
+  const multiLineBonus = Math.min(58, Math.max(0, lineCount - 1) * 14 + visibleTargets.length * 8);
+  return openFlex + visibleTargetScore + multiLineBonus;
+}
+
+function isQueenLaneImprovement(laneScore, currentLaneScore, futureAttack) {
+  return futureAttack.hasAttack || laneScore >= currentLaneScore + 8 || laneScore >= 82;
+}
+
+function scoreQueenFlexiblePressure(actor, move, safety, futureAttack, laneScore, currentLaneScore) {
+  if (actor.type !== "queen") {
+    return 0;
+  }
+  let score = 0;
+  const lineCount = countUsefulLineDirections(actor, move.row, move.col);
+
+  // Queens should feel flexible and dangerous from safe squares with several
+  // lines, but should not get melee-style credit for simply drifting closer.
+  if (safety.danger.attackers === 0) {
+    score += Math.min(48, lineCount * 9);
+    if (isCentralSquare(move.row, move.col)) {
+      score += 14;
+    }
+  }
+  if (!futureAttack.hasAttack && laneScore < currentLaneScore + 8) {
+    score -= 24;
+  }
+  if (safety.danger.attackers > 0 && !futureAttack.hasAttack) {
+    score -= 64;
+  }
+  if (futureAttack.hasAttack && safety.danger.attackers === 0) {
+    score += 32;
+  }
+  return score;
+}
+
+function scoreQueenDangerPenalty(actor, move, safety) {
+  let penalty = 0;
+  safety.danger.pieces.forEach((attacker) => {
+    if (attacker.type === "pawn") {
+      penalty += 150;
+    } else if (attacker.type === "knight") {
+      penalty += 138;
+    } else {
+      penalty += 34 + PIECES[attacker.type].cost * 7;
+    }
+  });
+  if (safety.danger.damage >= actor.hp) {
+    penalty += 190;
+  } else if (safety.danger.damage >= Math.ceil(actor.hp / 2)) {
+    penalty += 82;
+  }
+  if (isAdjacentToEnemyPawn(actor, move.row, move.col)) {
+    penalty += 76;
+  }
+  if (safety.protection.attackers > 0) {
+    penalty = Math.max(0, penalty - Math.min(52, safety.protection.attackers * 15 + safety.protection.damage * 4));
+  }
+  return penalty;
+}
+
+function countUsefulLineDirections(actor, row, col) {
+  return directionsFor(actor.type).reduce((count, [dr, dc]) => {
+    let nextRow = row + dr;
+    let nextCol = col + dc;
+    let openSquares = 0;
+    while (inBounds(nextRow, nextCol)) {
+      if (isBlockedSquare(nextRow, nextCol)) {
+        break;
+      }
+      const occupant = pieceAt(nextRow, nextCol, new Set([actor.id]));
+      if (occupant) {
+        return count + (occupant.side !== actor.side || openSquares >= 2 ? 1 : 0);
+      }
+      openSquares += 1;
+      nextRow += dr;
+      nextCol += dc;
+    }
+    return count + (openSquares >= 2 ? 1 : 0);
+  }, 0);
+}
+
+function isCentralSquare(row, col) {
+  const center = (boardSize() - 1) / 2;
+  return Math.abs(row - center) <= 2 && Math.abs(col - center) <= 2;
 }
 
 function visibleLineTargets(actor, row, col) {

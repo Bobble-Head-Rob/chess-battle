@@ -625,6 +625,60 @@ test("queen avoids dangerous future-attack square when safer strong square exist
   assert.equal(game.canAttackFrom(guard, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
 });
 
+test("queen attacks a clean visible target before moving", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const queen = addPiece(game, "player", "queen", 8, 4);
+  const target = addPiece(game, "enemy", "rook", 8, 8);
+
+  const action = game.decideAction(queen);
+
+  assert.equal(action.kind, "attack");
+  assert.equal(action.target, target);
+});
+
+test("queen prefers a safe multi-line pressure square", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const queen = addPiece(game, "player", "queen", 8, 4);
+  const sideTarget = addPiece(game, "enemy", "bishop", 6, 1);
+  const diagonalTarget = addPiece(game, "enemy", "rook", 3, 7);
+
+  const move = game.chooseMove(queen);
+  const pressuredTargets = [sideTarget, diagonalTarget].filter((target) => game.canAttackFrom(queen, move.row, move.col, target));
+
+  assert.deepEqual([move.row, move.col], [6, 4]);
+  assert.equal(pressuredTargets.length, 2);
+});
+
+test("queen avoids knight attack range when no strong payoff exists", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const queen = addPiece(game, "player", "queen", 8, 4);
+  const knight = addPiece(game, "enemy", "knight", 4, 5);
+  addPiece(game, "enemy", "bishop", 6, 1);
+  addPiece(game, "enemy", "rook", 3, 7);
+
+  const move = game.chooseMove(queen);
+
+  assert.notEqual(move, null);
+  assert.equal(game.canAttackFrom(knight, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
+});
+
+test("queen repositions around blocked terrain to create a useful lane", () => {
+  const game = loadGame();
+  emptyBoard(game, "brokenCenter");
+  const queen = addPiece(game, "player", "queen", 6, 1);
+  const target = addPiece(game, "enemy", "king", 2, 5);
+
+  assert.equal(game.canAttack(queen, target), false);
+
+  const move = game.chooseMove(queen);
+
+  assert.notEqual(move, null);
+  assert.equal(game.canAttackFrom(queen, move.row, move.col, target), true);
+});
+
 test("broken center blocked squares render as unusable cells", () => {
   const game = loadGame();
   emptyBoard(game, "brokenCenter");
