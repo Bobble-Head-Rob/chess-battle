@@ -679,6 +679,78 @@ test("queen repositions around blocked terrain to create a useful lane", () => {
   assert.equal(game.canAttackFrom(queen, move.row, move.col, target), true);
 });
 
+test("king prefers a protected advance over an isolated advance", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const king = addPiece(game, "player", "king", 8, 4);
+  const guards = [addPiece(game, "player", "pawn", 8, 2), addPiece(game, "player", "pawn", 8, 6)];
+  addPiece(game, "enemy", "rook", 5, 4);
+
+  const move = game.chooseMove(king);
+
+  assert.notEqual(move, null);
+  assert.equal(
+    guards.some((guard) => game.canAttackFrom(guard, move.row, move.col, { side: "enemy", row: move.row, col: move.col }) || Math.max(Math.abs(guard.row - move.row), Math.abs(guard.col - move.col)) <= 1),
+    true
+  );
+});
+
+test("king avoids moving into multiple enemy threats", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const king = addPiece(game, "player", "king", 8, 4);
+  const pawnA = addPiece(game, "enemy", "pawn", 6, 3);
+  const pawnB = addPiece(game, "enemy", "pawn", 6, 5);
+  addPiece(game, "enemy", "rook", 5, 4);
+
+  const move = game.chooseMove(king);
+
+  assert.notDeepEqual([move.row, move.col], [7, 4]);
+  assert.equal(game.canAttackFrom(pawnA, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
+  assert.equal(game.canAttackFrom(pawnB, move.row, move.col, { side: "player", row: move.row, col: move.col }), false);
+});
+
+test("king moves toward a weak nearby enemy when protected", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const king = addPiece(game, "player", "king", 8, 4);
+  addPiece(game, "player", "pawn", 8, 3);
+  const target = addPiece(game, "enemy", "pawn", 6, 4);
+
+  const move = game.chooseMove(king);
+
+  assert.deepEqual([move.row, move.col], [7, 4]);
+  assert.equal(game.canAttackFrom(king, move.row, move.col, target), true);
+});
+
+test("king attacks an adjacent target before wandering", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const king = addPiece(game, "player", "king", 8, 4);
+  const target = addPiece(game, "enemy", "pawn", 7, 4);
+
+  const action = game.decideAction(king);
+
+  assert.equal(action.kind, "attack");
+  assert.equal(action.target, target);
+});
+
+test("king does not freeze when a safe protected approach exists", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const king = addPiece(game, "player", "king", 8, 4);
+  const guards = [addPiece(game, "player", "pawn", 8, 3), addPiece(game, "player", "pawn", 8, 6)];
+  addPiece(game, "enemy", "bishop", 4, 7);
+
+  const move = game.chooseMove(king);
+
+  assert.notEqual(move, null);
+  assert.equal(
+    guards.some((guard) => game.canAttackFrom(guard, move.row, move.col, { side: "enemy", row: move.row, col: move.col }) || Math.max(Math.abs(guard.row - move.row), Math.abs(guard.col - move.col)) <= 1),
+    true
+  );
+});
+
 test("broken center blocked squares render as unusable cells", () => {
   const game = loadGame();
   emptyBoard(game, "brokenCenter");

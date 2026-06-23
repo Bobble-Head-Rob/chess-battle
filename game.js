@@ -1274,6 +1274,7 @@ function chooseMove(actor) {
     moveScore += scoreRookLaneDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore);
     moveScore += scoreBishopDiagonalDiscipline(actor, safety, futureAttack, laneScore, currentLaneScore);
     moveScore += scoreQueenFlexiblePressure(actor, move, safety, futureAttack, laneScore, currentLaneScore);
+    moveScore += scoreKingProtectedAdvance(actor, move, safety, futureAttack, targets);
 
     let bestTargetScore = -Infinity;
     targets.forEach((target) => {
@@ -1743,6 +1744,63 @@ function countUsefulLineDirections(actor, row, col) {
 function isCentralSquare(row, col) {
   const center = (boardSize() - 1) / 2;
   return Math.abs(row - center) <= 2 && Math.abs(col - center) <= 2;
+}
+
+function scoreKingProtectedAdvance(actor, move, safety, futureAttack, targets) {
+  if (actor.type !== "king") {
+    return 0;
+  }
+
+  let score = 0;
+  const friendlySupport = countNearbyPieces(actor.side, move.row, move.col, 1, actor.id);
+  const enemyAdjacent = countNearbyPieces(opponentSide(actor.side), move.row, move.col, 1);
+  const closestEnemy = closestTarget(move, targets);
+  const currentClosestEnemy = closestTarget(actor, targets);
+
+  // Kings should feel like protected bruisers: strong near friends and under
+  // cover, but poor when stepping alone into several enemy threats.
+  score += safety.protection.attackers * 24 + safety.protection.damage * 5;
+  score += friendlySupport * 14;
+
+  if (futureAttack.hasAttack) {
+    score += 44;
+  }
+  if (closestEnemy && currentClosestEnemy && distance(move, closestEnemy) < distance(actor, currentClosestEnemy)) {
+    score += safety.danger.attackers === 0 || safety.protection.attackers > 0 ? 22 : 6;
+  }
+  if (closestEnemy && closestEnemy.hp <= actor.damage && distance(move, closestEnemy) <= 1) {
+    score += 48;
+  }
+  if (closestEnemy && closestEnemy.hp <= actor.damage && distance(move, closestEnemy) < distance(actor, closestEnemy) && safety.protection.attackers > 0) {
+    score += 22;
+  }
+
+  if (safety.danger.attackers >= 2) {
+    score -= safety.protection.attackers > 0 ? 62 : 132;
+  } else if (safety.danger.attackers === 1 && safety.protection.attackers === 0) {
+    score -= 44;
+  }
+  if (enemyAdjacent >= 2) {
+    score -= safety.protection.attackers > 0 ? 36 : 86;
+  } else if (enemyAdjacent === 1 && friendlySupport === 0 && !futureAttack.hasAttack) {
+    score -= 28;
+  }
+  if (friendlySupport === 0 && safety.protection.attackers === 0 && closestEnemy && distance(move, closestEnemy) <= 2) {
+    score -= 36;
+  }
+
+  return score;
+}
+
+function countNearbyPieces(side, row, col, radius, ignoreId = null) {
+  return sidePieces(side).filter((piece) => piece.id !== ignoreId && Math.max(Math.abs(piece.row - row), Math.abs(piece.col - col)) <= radius).length;
+}
+
+function closestTarget(square, targets) {
+  if (targets.length === 0) {
+    return null;
+  }
+  return targets.reduce((closest, target) => (distance(square, target) < distance(square, closest) ? target : closest), targets[0]);
 }
 
 function visibleLineTargets(actor, row, col) {
