@@ -1965,6 +1965,9 @@ async function resolveAttack(actor, target) {
   if (targetStartHp !== target.hp || willKill) {
     addActionLog(message);
   }
+  if (target.hp <= 0 && shouldMoveIntoTarget(actor)) {
+    await resolveOpportunityAttack(actor, from, to);
+  }
 }
 
 async function resolveMove(actor, move, reason) {
@@ -1980,9 +1983,43 @@ async function resolveMove(actor, move, reason) {
   if (actor.type === "pawn" && isPawnOpeningAction(actor)) {
     const squares = Math.abs(move.row - from.row);
     addActionLog(`${pieceName(actor)} from ${squareName(from.row, from.col)} advances ${squares === 2 ? "two squares" : "one square"} to ${squareName(move.row, move.col)}.`);
+    await resolveOpportunityAttack(actor, from, move);
     return;
   }
   addActionLog(`${pieceName(actor)} from ${squareName(from.row, from.col)} moves to ${squareName(move.row, move.col)}, ${reason}.`);
+  await resolveOpportunityAttack(actor, from, move);
+}
+
+async function resolveOpportunityAttack(actor, from, to) {
+  if (actor.hp <= 0 || from.row === to.row && from.col === to.col) {
+    return false;
+  }
+  const king = sidePieces(opponentSide(actor.side))
+    .filter((piece) => piece.type === "king" && isAdjacentSquare(piece, from.row, from.col) && !isAdjacentSquare(piece, to.row, to.col))
+    .sort((a, b) => distance(a, actor) - distance(b, actor) || a.id - b.id)[0];
+  if (!king) {
+    return false;
+  }
+
+  const damage = king.damage;
+  const willKill = actor.hp <= damage;
+  playAttackSound(king, willKill);
+  await animateAttack(king, actor, willKill);
+
+  actor.hp -= damage;
+  let message = `${pieceName(king)} punishes retreating ${pieceName(actor)} for ${damage} damage.`;
+  if (actor.hp <= 0) {
+    state.pieces = state.pieces.filter((piece) => piece.id !== actor.id);
+    message += ` ${pieceName(actor)} destroyed.`;
+  } else {
+    message += ` ${pieceName(actor)} survives with ${actor.hp}/${actor.maxHp} HP.`;
+  }
+  addActionLog(message);
+  return true;
+}
+
+function isAdjacentSquare(piece, row, col) {
+  return Math.max(Math.abs(piece.row - row), Math.abs(piece.col - col)) === 1;
 }
 
 function markActionUsed(actor, actionStart, openingAction) {

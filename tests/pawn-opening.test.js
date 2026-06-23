@@ -242,6 +242,7 @@ render = () => {};
 globalThis.__game = {
   ACTION_THRESHOLD,
   SCENARIOS,
+  PIECES,
   state,
   createPiece,
   inspectPiece,
@@ -255,6 +256,8 @@ globalThis.__game = {
   legalMoves,
   chooseMove,
   decideAction,
+  resolveMove,
+  resolveAttack,
   canAttack,
   canAttackFrom,
   canThreatenSquare,
@@ -749,6 +752,74 @@ test("king does not freeze when a safe protected approach exists", () => {
     guards.some((guard) => game.canAttackFrom(guard, move.row, move.col, { side: "enemy", row: move.row, col: move.col }) || Math.max(Math.abs(guard.row - move.row), Math.abs(guard.col - move.col)) <= 1),
     true
   );
+});
+
+test("enemy moving out of king adjacency takes opportunity damage", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  addPiece(game, "player", "king", 8, 4);
+  const knight = addPiece(game, "enemy", "knight", 7, 5);
+
+  await game.resolveMove(knight, { row: 5, col: 6 }, "testing disengage");
+
+  assert.equal(knight.hp, 1);
+  assert.match(game.state.log.at(-1).text, /punishes retreating Enemy Knight for 2 damage/);
+});
+
+test("enemy staying adjacent to a king does not trigger opportunity damage", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  addPiece(game, "player", "king", 8, 4);
+  const knight = addPiece(game, "enemy", "knight", 7, 5);
+
+  await game.resolveMove(knight, { row: 8, col: 5 }, "testing close move");
+
+  assert.equal(knight.hp, 3);
+  assert.equal(game.state.log.some((entry) => entry.text.includes("punishes retreating")), false);
+});
+
+test("enemy moving while outside king adjacency does not trigger opportunity damage", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  addPiece(game, "player", "king", 8, 4);
+  const knight = addPiece(game, "enemy", "knight", 5, 5);
+
+  await game.resolveMove(knight, { row: 4, col: 7 }, "testing distant move");
+
+  assert.equal(knight.hp, 3);
+  assert.equal(game.state.log.some((entry) => entry.text.includes("punishes retreating")), false);
+});
+
+test("king opportunity damage can destroy a retreating enemy", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  addPiece(game, "player", "king", 8, 4);
+  const pawn = addPiece(game, "enemy", "pawn", 7, 5);
+
+  await game.resolveMove(pawn, { row: 6, col: 5 }, "testing lethal disengage");
+
+  assert.equal(game.state.pieces.includes(pawn), false);
+  assert.match(game.state.log.at(-1).text, /Enemy Pawn destroyed/);
+});
+
+test("knight disengage from king adjacency triggers opportunity damage", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  addPiece(game, "player", "king", 8, 4);
+  const knight = addPiece(game, "enemy", "knight", 7, 3);
+
+  await game.resolveMove(knight, { row: 5, col: 2 }, "testing knight disengage");
+
+  assert.equal(knight.hp, 1);
+});
+
+test("king stats remain unchanged by opportunity attack tuning", () => {
+  const game = loadGame();
+
+  assert.equal(game.PIECES.king.speed, 1);
+  assert.equal(game.PIECES.king.hp, 6);
+  assert.equal(game.PIECES.king.damage, 2);
+  assert.equal(game.PIECES.king.cost, 8);
 });
 
 test("broken center blocked squares render as unusable cells", () => {
