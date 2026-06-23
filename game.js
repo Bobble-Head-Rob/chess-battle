@@ -90,6 +90,147 @@ const SCENARIOS = {
       { type: "knight", row: 1, col: 6 },
     ],
   },
+  pillarGarden: {
+    label: "Pillar Garden",
+    rows: 10,
+    cols: 8,
+    budget: 35,
+    playerDeployRows: 2,
+    enemyDeployRows: 2,
+    summary: "8x10 board · 35 budget · 64 playable squares · central pillars create ranged firing lanes · enemies: 5 pawns, 2 knights, 2 bishops, 1 rook",
+    blockedSquares: namedSquares(10, [
+      "B4",
+      "D4",
+      "E4",
+      "G4",
+      "B5",
+      "D5",
+      "E5",
+      "G5",
+      "B6",
+      "D6",
+      "E6",
+      "G6",
+      "B7",
+      "D7",
+      "E7",
+      "G7",
+    ]),
+    enemies: [
+      { type: "bishop", row: 0, col: 1 },
+      { type: "rook", row: 0, col: 3 },
+      { type: "bishop", row: 0, col: 6 },
+      { type: "knight", row: 1, col: 1 },
+      { type: "pawn", row: 1, col: 2 },
+      { type: "pawn", row: 1, col: 3 },
+      { type: "pawn", row: 1, col: 4 },
+      { type: "pawn", row: 1, col: 5 },
+      { type: "knight", row: 1, col: 6 },
+      { type: "pawn", row: 1, col: 7 },
+    ],
+  },
+  twinCauseways: {
+    label: "Twin Causeways",
+    rows: 12,
+    cols: 7,
+    budget: 34,
+    playerDeployRows: 2,
+    enemyDeployRows: 2,
+    summary: "7x12 board · 34 budget · 64 playable squares · offset causeways reward flanking · enemies: 5 pawns, 2 knights, 2 bishops, 1 rook",
+    blockedSquares: namedSquares(12, [
+      "A3",
+      "B3",
+      "A4",
+      "B4",
+      "F3",
+      "G3",
+      "F4",
+      "G4",
+      "C5",
+      "E5",
+      "A9",
+      "B9",
+      "A10",
+      "B10",
+      "F9",
+      "G9",
+      "F10",
+      "G10",
+      "C8",
+      "E8",
+    ]),
+    enemies: [
+      { type: "bishop", row: 0, col: 0 },
+      { type: "rook", row: 0, col: 3 },
+      { type: "bishop", row: 0, col: 6 },
+      { type: "knight", row: 1, col: 2 },
+      { type: "pawn", row: 1, col: 1 },
+      { type: "pawn", row: 1, col: 3 },
+      { type: "pawn", row: 1, col: 4 },
+      { type: "knight", row: 1, col: 5 },
+      { type: "pawn", row: 0, col: 2 },
+      { type: "pawn", row: 0, col: 4 },
+    ],
+  },
+  fortressRing: {
+    label: "Fortress Ring",
+    rows: 10,
+    cols: 10,
+    budget: 36,
+    playerDeployRows: 2,
+    enemyDeployRows: 2,
+    summary: "10x10 board · 36 budget · 64 playable squares · central fortress forces outer-ring battles · enemies: 4 pawns, 2 knights, 2 bishops, 1 rook, 1 queen",
+    blockedSquares: namedSquares(10, [
+      "C4",
+      "D4",
+      "E4",
+      "F4",
+      "G4",
+      "H4",
+      "C5",
+      "D5",
+      "E5",
+      "F5",
+      "G5",
+      "H5",
+      "C6",
+      "D6",
+      "E6",
+      "F6",
+      "G6",
+      "H6",
+      "C7",
+      "D7",
+      "E7",
+      "F7",
+      "G7",
+      "H7",
+      "C8",
+      "D8",
+      "E8",
+      "F8",
+      "G8",
+      "H8",
+      "C9",
+      "D9",
+      "E9",
+      "F9",
+      "G9",
+      "H9",
+    ]),
+    enemies: [
+      { type: "bishop", row: 0, col: 0 },
+      { type: "rook", row: 0, col: 1 },
+      { type: "queen", row: 0, col: 4 },
+      { type: "bishop", row: 0, col: 9 },
+      { type: "pawn", row: 1, col: 0 },
+      { type: "pawn", row: 1, col: 1 },
+      { type: "knight", row: 0, col: 7 },
+      { type: "knight", row: 0, col: 8 },
+      { type: "pawn", row: 1, col: 8 },
+      { type: "pawn", row: 1, col: 9 },
+    ],
+  },
 };
 
 const PIECES = {
@@ -250,11 +391,19 @@ function currentScenario() {
 }
 
 function boardSize() {
-  return currentScenario().boardSize;
+  return currentScenario().boardSize || boardRows();
+}
+
+function boardRows() {
+  return currentScenario().rows || currentScenario().boardSize;
+}
+
+function boardCols() {
+  return currentScenario().cols || currentScenario().boardSize;
 }
 
 function playerDeployStart() {
-  return boardSize() - playerDeployRows();
+  return boardRows() - playerDeployRows();
 }
 
 function enemyDeployEnd() {
@@ -394,15 +543,19 @@ function renderShop() {
 }
 
 function renderBoard() {
-  const size = boardSize();
+  const rows = boardRows();
+  const cols = boardCols();
   const boardOverlays = buildBoardOverlays();
   const inspectedForBoard = activeBoardInspection();
   const previewPiece = placementPreviewPiece();
   boardEl.innerHTML = "";
-  boardEl.style.setProperty("--board-size", String(size));
-  boardEl.setAttribute("aria-label", `${size} by ${size} battle board`);
-  for (let row = 0; row < size; row += 1) {
-    for (let col = 0; col < size; col += 1) {
+  boardEl.style.setProperty("--board-rows", String(rows));
+  boardEl.style.setProperty("--board-cols", String(cols));
+  boardEl.parentElement?.style.setProperty("--board-rows", String(rows));
+  boardEl.parentElement?.style.setProperty("--board-cols", String(cols));
+  boardEl.setAttribute("aria-label", `${cols} by ${rows} battle board`);
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
       const cell = document.createElement("button");
       cell.type = "button";
       cell.className = `cell ${(row + col) % 2 === 0 ? "light" : "dark"}`;
@@ -1365,9 +1518,10 @@ function buildMoveCoverage(actor) {
 }
 
 function buildCoverageMap(attackingSide, ignoreIds = new Set(), extraAttackers = []) {
-  const size = boardSize();
-  const map = Array.from({ length: size }, () =>
-    Array.from({ length: size }, () => ({
+  const rows = boardRows();
+  const cols = boardCols();
+  const map = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => ({
       attackers: 0,
       damage: 0,
       maxDamage: 0,
@@ -1379,8 +1533,8 @@ function buildCoverageMap(attackingSide, ignoreIds = new Set(), extraAttackers =
     if (ignoreIds.has(attacker.id)) {
       return;
     }
-    for (let row = 0; row < size; row += 1) {
-      for (let col = 0; col < size; col += 1) {
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
         if (canThreatenSquare(attacker, row, col, ignoreIds)) {
           const coverage = map[row][col];
           coverage.attackers += 1;
@@ -1760,8 +1914,9 @@ function countUsefulLineDirections(actor, row, col) {
 }
 
 function isCentralSquare(row, col) {
-  const center = (boardSize() - 1) / 2;
-  return Math.abs(row - center) <= 2 && Math.abs(col - center) <= 2;
+  const centerRow = (boardRows() - 1) / 2;
+  const centerCol = (boardCols() - 1) / 2;
+  return Math.abs(row - centerRow) <= 2 && Math.abs(col - centerCol) <= 2;
 }
 
 function scoreKingProtectedAdvance(actor, move, safety, futureAttack, targets) {
@@ -2242,7 +2397,7 @@ function isOpen(row, col) {
 }
 
 function inBounds(row, col) {
-  return row >= 0 && row < boardSize() && col >= 0 && col < boardSize();
+  return row >= 0 && row < boardRows() && col >= 0 && col < boardCols();
 }
 
 function isBlockedSquare(row, col) {
@@ -2659,7 +2814,19 @@ function battleActionLimit() {
 }
 
 function squareName(row, col) {
-  return `${FILES[col]}${boardSize() - row}`;
+  return `${FILES[col]}${boardRows() - row}`;
+}
+
+function namedSquares(rows, names) {
+  return names.map((name) => {
+    const file = name.slice(0, 1).toUpperCase();
+    const rank = Number(name.slice(1));
+    const col = FILES.indexOf(file);
+    if (col < 0 || !Number.isInteger(rank) || rank < 1 || rank > rows) {
+      throw new Error(`Invalid square ${name}`);
+    }
+    return { row: rows - rank, col };
+  });
 }
 
 function squareKey(row, col) {

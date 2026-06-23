@@ -244,6 +244,8 @@ globalThis.__game = {
   SCENARIOS,
   PIECES,
   state,
+  boardRows,
+  boardCols,
   createPiece,
   inspectPiece,
   clearHoverInspection,
@@ -337,6 +339,37 @@ function findByClass(root, className) {
     const found = findByClass(child, className);
     if (found) {
       return found;
+    }
+  }
+  return null;
+}
+
+function playableSquareCount(game, scenario) {
+  return (scenario.rows || scenario.boardSize) * (scenario.cols || scenario.boardSize) - (scenario.blockedSquares?.length || 0);
+}
+
+function uniqueSquareCount(squares) {
+  return new Set(squares.map((square) => `${square.row},${square.col}`)).size;
+}
+
+function findBlockedLineTestSquare(game, scenario) {
+  const rows = scenario.rows || scenario.boardSize;
+  const cols = scenario.cols || scenario.boardSize;
+  const blockedSet = new Set(scenario.blockedSquares.map((square) => `${square.row},${square.col}`));
+  for (let row = 0; row < rows; row += 1) {
+    for (let fromCol = 0; fromCol < cols - 2; fromCol += 1) {
+      if (blockedSet.has(`${row},${fromCol}`)) {
+        continue;
+      }
+      for (let toCol = fromCol + 2; toCol < cols; toCol += 1) {
+        if (blockedSet.has(`${row},${toCol}`)) {
+          continue;
+        }
+        const hasBlockedBetween = scenario.blockedSquares.some((square) => square.row === row && square.col > fromCol && square.col < toCol);
+        if (hasBlockedBetween) {
+          return { row, fromCol, toCol };
+        }
+      }
     }
   }
   return null;
@@ -955,6 +988,56 @@ test("broken center blocked squares render as unusable cells", () => {
   );
 });
 
+for (const scenarioId of ["pillarGarden", "twinCauseways", "fortressRing"]) {
+  test(`${scenarioId} has exactly 64 playable squares`, () => {
+    const game = loadGame();
+    const scenario = game.SCENARIOS[scenarioId];
+    const rows = scenario.rows || scenario.boardSize;
+    const cols = scenario.cols || scenario.boardSize;
+
+    assert.equal(playableSquareCount(game, scenario), 64);
+    assert.equal(uniqueSquareCount(scenario.blockedSquares), scenario.blockedSquares.length);
+    scenario.blockedSquares.forEach((square) => {
+      assert.equal(square.row >= 0 && square.row < rows, true);
+      assert.equal(square.col >= 0 && square.col < cols, true);
+    });
+  });
+
+  test(`${scenarioId} renders blocked tiles and keeps overlays off them`, () => {
+    const game = loadGame();
+    emptyBoard(game, scenarioId);
+    const scenario = game.SCENARIOS[scenarioId];
+    const scout = addPiece(game, "player", "queen", game.boardRows() - 2, Math.min(3, game.boardCols() - 1));
+    game.state.selectedInspectPieceId = scout.id;
+    game.state.overlays = { moves: true, attacks: true, threat: true, protection: true };
+
+    game.renderBoard();
+
+    const blockedCells = game.boardEl.children.filter((cell) => cell.classList.contains("blocked-square"));
+    const overlays = game.buildBoardOverlays();
+
+    assert.equal(blockedCells.length, scenario.blockedSquares.length);
+    scenario.blockedSquares.forEach((square) => {
+      assert.equal(game.isBlockedSquare(square.row, square.col), true);
+      assert.equal(game.canPreviewPlacement(square.row, square.col), false);
+      assert.equal(overlays.has(game.squareKey(square.row, square.col)), false);
+    });
+  });
+
+  test(`${scenarioId} blocked tiles stop ranged line attacks`, () => {
+    const game = loadGame();
+    emptyBoard(game, scenarioId);
+    const scenario = game.SCENARIOS[scenarioId];
+    const blocked = findBlockedLineTestSquare(game, scenario);
+
+    assert.ok(blocked);
+    const rook = addPiece(game, "player", "rook", blocked.row, blocked.fromCol);
+    const target = addPiece(game, "enemy", "king", blocked.row, blocked.toCol);
+
+    assert.equal(game.canAttack(rook, target), false);
+  });
+}
+
 test("player cannot place on blocked squares", () => {
   const game = loadGame();
   emptyBoard(game, "brokenCenter");
@@ -1144,14 +1227,14 @@ test("step, pause, resolve, and scoreboard states still work", async () => {
   assert.equal(game.scoreboardTitleEl.textContent, "Victory");
 });
 
-for (const scenarioId of ["variety", "swarm", "brokenCenter"]) {
+for (const scenarioId of ["variety", "swarm", "brokenCenter", "pillarGarden", "twinCauseways", "fortressRing"]) {
   test(`${scenarioId} scenario still resolves without hanging`, async () => {
     const game = loadGame();
     game.state.scenarioId = scenarioId;
     game.resetState();
     game.state.phase = "running";
     game.state.speed = "fast";
-    addPiece(game, "player", "pawn", game.SCENARIOS[scenarioId].boardSize - 2, 4);
+    addPiece(game, "player", "pawn", game.boardRows() - 2, Math.min(4, game.boardCols() - 1));
     game.prepareOpeningInitiative();
 
     for (let i = 0; i < 600 && game.state.phase !== "ended"; i += 1) {

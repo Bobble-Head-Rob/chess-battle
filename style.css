@@ -695,10 +695,12 @@ select:disabled {
 }
 
 .board-shell {
+  --board-rows: 10;
+  --board-cols: 10;
   position: relative;
-  width: min(100%, 760px, 72vh);
+  width: min(100%, 760px, calc(72vh * var(--board-cols) / var(--board-rows)));
   margin: 0 auto;
-  aspect-ratio: 1;
+  aspect-ratio: var(--board-cols) / var(--board-rows);
   border: 5px solid #2a3442;
   border-radius: 8px;
   background: #2a3442;
@@ -706,10 +708,9 @@ select:disabled {
 }
 
 .board {
-  --board-size: 10;
   display: grid;
-  grid-template-columns: repeat(var(--board-size), minmax(0, 1fr));
-  grid-template-rows: repeat(var(--board-size), minmax(0, 1fr));
+  grid-template-columns: repeat(var(--board-cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--board-rows), minmax(0, 1fr));
   width: 100%;
   height: 100%;
   position: relative;
