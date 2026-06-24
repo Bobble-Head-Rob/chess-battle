@@ -273,12 +273,17 @@ globalThis.__game = {
   prepareOpeningInitiative,
   captureScoreSnapshot,
   chooseNextActor,
+  armyCost,
+  generateEqualBudgetScrambleArmy,
+  refreshScenarioEnemyArmy,
+  rerollEnemyArmy,
   animateAttack,
   effectLayer,
   stepOneAction,
   togglePause,
   takeOneAction,
   renderScoreboard,
+  renderStatus,
   renderInspectPanel,
   inspectHintEl,
   inspectDetailsEl,
@@ -286,6 +291,8 @@ globalThis.__game = {
   scoreboardTitleEl,
   scoreboardGradeEl,
   boardEl,
+  enemyBudgetUsedEl,
+  rerollEnemyButton,
   soundToggleEl,
   soundVolumeEl,
   squareKey,
@@ -373,6 +380,15 @@ function findBlockedLineTestSquare(game, scenario) {
     }
   }
   return null;
+}
+
+function sequenceRandom(values) {
+  let index = 0;
+  return () => {
+    const value = values[index % values.length];
+    index += 1;
+    return value;
+  };
 }
 
 test("pawns can move two squares on their first action when both squares are clear", () => {
@@ -1227,7 +1243,60 @@ test("step, pause, resolve, and scoreboard states still work", async () => {
   assert.equal(game.scoreboardTitleEl.textContent, "Victory");
 });
 
-for (const scenarioId of ["variety", "swarm", "brokenCenter", "pillarGarden", "twinCauseways", "fortressRing"]) {
+test("equal budget scramble generator respects budget, limits, and deployment zone", () => {
+  const game = loadGame();
+  const generated = game.generateEqualBudgetScrambleArmy(
+    { budget: 50, rows: 8, cols: 8, enemyDeployRows: 2 },
+    sequenceRandom([0.12, 0.82, 0.34, 0.64, 0.18, 0.91, 0.47, 0.73, 0.28, 0.56])
+  );
+
+  const counts = generated.enemies.reduce((summary, piece) => {
+    summary[piece.type] = (summary[piece.type] || 0) + 1;
+    return summary;
+  }, {});
+  const frontlineCount = (counts.pawn || 0) + (counts.knight || 0) + (counts.king || 0);
+  const usedSquares = new Set(generated.enemies.map((piece) => `${piece.row},${piece.col}`));
+
+  assert.ok(generated.budgetUsed <= 50);
+  assert.ok(generated.budgetUsed >= 43);
+  assert.equal(generated.budgetUsed, game.armyCost(generated.enemies));
+  assert.ok((counts.queen || 0) <= 1);
+  assert.ok((counts.rook || 0) <= 2);
+  assert.ok(frontlineCount >= 4);
+  assert.ok(generated.enemies.length >= 5);
+  assert.equal(usedSquares.size, generated.enemies.length);
+  generated.enemies.forEach((piece) => {
+    assert.ok(piece.row >= 0 && piece.row <= 1);
+    assert.ok(piece.col >= 0 && piece.col <= 7);
+  });
+});
+
+test("equal budget scramble reset populates random enemy army and updates scenario controls", () => {
+  const game = loadGame();
+  game.state.scenarioId = "equalBudgetScramble";
+  game.resetState();
+  game.renderStatus();
+
+  const enemies = game.state.pieces.filter((piece) => piece.side === "enemy");
+
+  assert.equal(game.SCENARIOS.equalBudgetScramble.budget, 50);
+  assert.equal(game.boardRows(), 8);
+  assert.equal(game.boardCols(), 8);
+  assert.equal(game.state.budget, 50);
+  assert.equal(game.state.phase, "setup");
+  assert.equal(game.state.scenarioEnemyArmy.length, enemies.length);
+  assert.equal(game.state.enemyBudgetUsed, game.armyCost(game.state.scenarioEnemyArmy));
+  assert.ok(game.state.enemyBudgetUsed >= 43);
+  assert.equal(game.enemyBudgetUsedEl.hidden, false);
+  assert.equal(game.rerollEnemyButton.hidden, false);
+  assert.equal(game.rerollEnemyButton.disabled, false);
+  enemies.forEach((piece) => {
+    assert.ok(piece.row >= 0 && piece.row <= 1);
+    assert.ok(piece.col >= 0 && piece.col <= 7);
+  });
+});
+
+for (const scenarioId of ["variety", "swarm", "brokenCenter", "pillarGarden", "twinCauseways", "fortressRing", "equalBudgetScramble"]) {
   test(`${scenarioId} scenario still resolves without hanging`, async () => {
     const game = loadGame();
     game.state.scenarioId = scenarioId;

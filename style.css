@@ -534,6 +534,12 @@ select:disabled {
   line-height: 1.28;
 }
 
+.army-summary small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
 .battle-toolbar {
   flex-wrap: wrap;
   align-items: center;

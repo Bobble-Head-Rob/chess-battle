@@ -231,6 +231,15 @@ const SCENARIOS = {
       { type: "pawn", row: 1, col: 9 },
     ],
   },
+  equalBudgetScramble: {
+    label: "Equal Budget Scramble",
+    boardSize: 8,
+    budget: 50,
+    playerDeployRows: 2,
+    enemyDeployRows: 2,
+    summary: "8x8 board · 50 budget · no blockers · enemy army rerolls in the top two rows",
+    randomEnemy: true,
+  },
 };
 
 const PIECES = {
@@ -328,6 +337,7 @@ const battleStateEl = document.getElementById("battleState");
 const budgetValueEl = document.getElementById("budgetValue");
 const playerCountEl = document.getElementById("playerCount");
 const enemyCountEl = document.getElementById("enemyCount");
+const enemyBudgetUsedEl = document.getElementById("enemyBudgetUsed");
 const playerCompositionEl = document.getElementById("playerComposition");
 const enemyCompositionEl = document.getElementById("enemyComposition");
 const placementHintEl = document.getElementById("placementHint");
@@ -348,6 +358,7 @@ const startButton = document.getElementById("startButton");
 const pauseButton = document.getElementById("pauseButton");
 const stepButton = document.getElementById("stepButton");
 const resetButton = document.getElementById("resetButton");
+const rerollEnemyButton = document.getElementById("rerollEnemyButton");
 const speedSelect = document.getElementById("speedSelect");
 const soundToggleEl = document.getElementById("soundToggle");
 const soundVolumeEl = document.getElementById("soundVolume");
@@ -384,6 +395,8 @@ const state = {
   ticks: 0,
   scoreSnapshot: null,
   log: [],
+  scenarioEnemyArmy: [],
+  enemyBudgetUsed: 0,
 };
 
 function currentScenario() {
@@ -416,6 +429,201 @@ function playerDeployRows() {
 
 function enemyDeployRows() {
   return currentScenario().enemyDeployRows || 3;
+}
+
+function scenarioEnemyArmy() {
+  return state.scenarioEnemyArmy.length > 0 ? state.scenarioEnemyArmy : currentScenario().enemies || [];
+}
+
+function armyCost(pieces) {
+  return pieces.reduce((total, piece) => total + PIECES[piece.type].cost, 0);
+}
+
+function shuffleList(items, random = Math.random) {
+  const copy = items.slice();
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+  return copy;
+}
+
+function weightedPick(choices, random = Math.random) {
+  const totalWeight = choices.reduce((total, choice) => total + choice.weight, 0);
+  if (totalWeight <= 0) {
+    return null;
+  }
+  let roll = random() * totalWeight;
+  for (const choice of choices) {
+    roll -= choice.weight;
+    if (roll <= 0) {
+      return choice.type;
+    }
+  }
+  return choices[choices.length - 1]?.type || null;
+}
+
+function generateEqualBudgetScrambleArmy(config = {}, random = Math.random) {
+  const budget = config.budget ?? 50;
+  const rows = config.rows ?? 8;
+  const cols = config.cols ?? 8;
+  const deployRows = config.enemyDeployRows ?? 2;
+  const maxUnits = deployRows * cols;
+  const minSpend = Math.ceil(budget * 0.85);
+  const baselineOptions = [
+    ["pawn", "pawn", "pawn", "pawn", "knight"],
+    ["pawn", "pawn", "pawn", "pawn", "pawn", "knight"],
+    ["pawn", "pawn", "pawn", "knight", "knight"],
+    ["pawn", "pawn", "pawn", "pawn", "king"],
+  ];
+
+  let bestCandidate = null;
+
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const army = [];
+    const counts = {};
+    let spent = 0;
+
+    const affordableBaselines = baselineOptions.filter((baseline) => {
+      const cost = baseline.reduce((total, type) => total + PIECES[type].cost, 0);
+      return cost <= budget && baseline.length <= maxUnits;
+    });
+    const baselinePool = affordableBaselines.length > 0 ? affordableBaselines : [["pawn", "pawn", "pawn", "pawn"]];
+    const baseline = baselinePool[Math.floor(random() * baselinePool.length)];
+
+    baseline.forEach((type) => {
+      army.push({ type });
+      counts[type] = (counts[type] || 0) + 1;
+      spent += PIECES[type].cost;
+    });
+
+    while (army.length < maxUnits) {
+      const remaining = budget - spent;
+      if (remaining <= 0) {
+        break;
+      }
+
+      const frontliners = (counts.pawn || 0) + (counts.knight || 0) + (counts.king || 0);
+      const choices = [
+        { type: "pawn", weight: remaining >= 1 ? (frontliners < 6 ? 4.8 : remaining <= 4 ? 3.8 : 2.2) : 0 },
+        { type: "knight", weight: remaining >= 3 ? (frontliners < 5 ? 3.4 : 2.1) : 0 },
+        { type: "bishop", weight: remaining >= 4 ? 2.3 : 0 },
+        { type: "rook", weight: remaining >= 5 && (counts.rook || 0) < 2 ? 1.35 : 0 },
+        { type: "queen", weight: remaining >= 9 && (counts.queen || 0) < 1 ? 0.7 : 0 },
+        { type: "king", weight: remaining >= 8 && (counts.king || 0) < 1 ? 1.15 : 0 },
+      ].filter((choice) => choice.weight > 0);
+
+      if (choices.length === 0) {
+        break;
+      }
+
+      if (spent >= Math.floor(budget * 0.94) && remaining < 5 && random() < 0.45) {
+        break;
+      }
+
+      const picked = weightedPick(choices, random);
+      if (!picked) {
+        break;
+      }
+      army.push({ type: picked });
+      counts[picked] = (counts[picked] || 0) + 1;
+      spent += PIECES[picked].cost;
+    }
+
+    const frontliners = (counts.pawn || 0) + (counts.knight || 0) + (counts.king || 0);
+    const canAffordPawn = spent < budget && army.length < maxUnits;
+    if (frontliners < 4 && canAffordPawn) {
+      army.push({ type: "pawn" });
+      counts.pawn = (counts.pawn || 0) + 1;
+      spent += PIECES.pawn.cost;
+    }
+
+    const score =
+      spent * 5
+      - Math.abs(budget - spent) * 4
+      - Math.max(0, 4 - frontliners) * 18
+      - Math.max(0, (counts.queen || 0) - 1) * 60
+      - Math.max(0, (counts.rook || 0) - 2) * 45
+      - Math.max(0, 5 - army.length) * 8
+      + random();
+
+    const candidate = { army, spent, counts, score };
+    if (spent >= minSpend && (!bestCandidate || candidate.score > bestCandidate.score)) {
+      bestCandidate = candidate;
+      if (spent === budget && frontliners >= 4) {
+        break;
+      }
+    } else if (!bestCandidate || candidate.score > bestCandidate.score) {
+      bestCandidate = candidate;
+    }
+  }
+
+  const fallback = bestCandidate || {
+    army: [{ type: "pawn" }, { type: "pawn" }, { type: "pawn" }, { type: "pawn" }, { type: "knight" }],
+    spent: 7,
+  };
+
+  return placeEnemyArmyInDeploymentZone(fallback.army, { rows, cols, deployRows }, random);
+}
+
+function placeEnemyArmyInDeploymentZone(army, config, random = Math.random) {
+  const frontRow = Math.max(0, config.deployRows - 1);
+  const backRow = 0;
+  const frontlineSlots = shuffleList(
+    Array.from({ length: config.cols }, (_, col) => ({ row: frontRow, col })),
+    random
+  );
+  const supportSlots = shuffleList(
+    Array.from({ length: config.cols }, (_, col) => ({ row: backRow, col })),
+    random
+  );
+  const reserveRows = Array.from({ length: Math.max(0, config.deployRows - 2) }, (_, index) => index + 1);
+  const reserveSlots = shuffleList(
+    reserveRows.flatMap((row) => Array.from({ length: config.cols }, (_, col) => ({ row, col }))),
+    random
+  );
+
+  const slots = {
+    front: frontlineSlots,
+    support: supportSlots,
+    reserve: reserveSlots,
+  };
+
+  const positioned = shuffleList(army, random).map((piece) => {
+    const preferredLane = ["pawn", "knight", "king"].includes(piece.type) ? "front" : "support";
+    const slot = takeDeploymentSlot(slots, preferredLane);
+    return { type: piece.type, row: slot.row, col: slot.col };
+  });
+
+  return {
+    enemies: positioned,
+    budgetUsed: armyCost(positioned),
+  };
+}
+
+function takeDeploymentSlot(slots, preferredLane) {
+  return slots[preferredLane].pop() || slots.front.pop() || slots.support.pop() || slots.reserve.pop();
+}
+
+function refreshScenarioEnemyArmy(random = Math.random) {
+  const scenario = currentScenario();
+  if (scenario.randomEnemy) {
+    const generated = generateEqualBudgetScrambleArmy(
+      {
+        budget: scenario.budget,
+        rows: boardRows(),
+        cols: boardCols(),
+        enemyDeployRows: enemyDeployRows(),
+      },
+      random
+    );
+    state.scenarioEnemyArmy = generated.enemies;
+    state.enemyBudgetUsed = generated.budgetUsed;
+    return;
+  }
+
+  state.scenarioEnemyArmy = (scenario.enemies || []).map((enemy) => ({ ...enemy }));
+  state.enemyBudgetUsed = armyCost(state.scenarioEnemyArmy);
 }
 
 function createPiece(side, type, row, col) {
@@ -456,20 +664,21 @@ function resetState() {
   state.ticks = 0;
   state.scoreSnapshot = null;
   state.log = [];
+  refreshScenarioEnemyArmy();
   clearEffects();
   placeEnemyArmy();
-  addLog(`Scenario ready: ${scenario.label}. Enemy deploys ${enemySummary(scenario)}. Player has ${scenario.budget} points to spend.`, "system");
+  addLog(`Scenario ready: ${scenario.label}. Enemy deploys ${enemySummary()}. Player has ${scenario.budget} points to spend.`, "system");
   render();
 }
 
 function placeEnemyArmy() {
-  currentScenario().enemies.forEach((enemy) => {
+  scenarioEnemyArmy().forEach((enemy) => {
     state.pieces.push(createPiece("enemy", enemy.type, enemy.row, enemy.col));
   });
 }
 
-function enemySummary(scenario) {
-  const counts = scenario.enemies.reduce((summary, enemy) => {
+function enemySummary() {
+  const counts = scenarioEnemyArmy().reduce((summary, enemy) => {
     summary[enemy.type] = (summary[enemy.type] || 0) + 1;
     return summary;
   }, {});
@@ -709,6 +918,8 @@ function renderStatus() {
   budgetValueEl.textContent = String(state.budget);
   playerCountEl.textContent = `${playerCount} total`;
   enemyCountEl.textContent = `${enemyCount} total`;
+  enemyBudgetUsedEl.textContent = `Enemy budget used: ${state.enemyBudgetUsed} / ${scenario.budget}`;
+  enemyBudgetUsedEl.hidden = !scenario.randomEnemy;
   playerCompositionEl.textContent = armyComposition("player");
   enemyCompositionEl.textContent = armyComposition("enemy");
   scenarioSummaryEl.textContent = scenario.summary;
@@ -726,6 +937,8 @@ function renderStatus() {
   pauseButton.textContent = state.phase === "paused" ? "Resume" : "Pause";
   stepButton.disabled = state.phase === "ended" || state.actionBusy;
   resetButton.disabled = state.actionBusy;
+  rerollEnemyButton.hidden = !scenario.randomEnemy;
+  rerollEnemyButton.disabled = state.phase !== "setup" || state.actionBusy;
   scenarioSelectEl.disabled = state.actionBusy;
   soundToggleEl.checked = state.soundEnabled;
   soundVolumeEl.value = String(state.soundVolume);
@@ -2956,6 +3169,15 @@ function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function rerollEnemyArmy() {
+  if (!currentScenario().randomEnemy || state.phase !== "setup") {
+    return;
+  }
+  resetState();
+  addLog(`Enemy rerolled. New army spends ${state.enemyBudgetUsed} of ${currentScenario().budget}.`, "system");
+  render();
+}
+
 startButton.addEventListener("click", () => {
   ensureAudioContext();
   startBattle();
@@ -2969,6 +3191,7 @@ stepButton.addEventListener("click", () => {
   stepOneAction();
 });
 resetButton.addEventListener("click", resetState);
+rerollEnemyButton.addEventListener("click", rerollEnemyArmy);
 scoreboardResetButton.addEventListener("click", resetState);
 scenarioSelectEl.addEventListener("change", () => {
   state.scenarioId = scenarioSelectEl.value;
