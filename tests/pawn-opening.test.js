@@ -327,6 +327,7 @@ function emptyBoard(game, scenarioId = "variety") {
   game.state.ticks = 0;
   game.state.scoreSnapshot = null;
   game.state.log = [];
+  game.state.pendingTieGroup = null;
 }
 
 function addPiece(game, side, type, row, col) {
@@ -444,6 +445,38 @@ test("pawn diagonal attacks still work and forward squares are not threatened", 
   assert.equal(game.decideAction(pawn).kind, "attack");
 });
 
+test("white pawn promotes on the top row and gains queen behavior", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const pawn = addPiece(game, "player", "pawn", 1, 4);
+  const target = addPiece(game, "enemy", "rook", 0, 7);
+
+  await game.resolveMove(pawn, { row: 0, col: 4 }, "reaching promotion");
+
+  assert.equal(pawn.type, "queen");
+  assert.equal(pawn.hp, game.PIECES.queen.hp);
+  assert.equal(pawn.maxHp, game.PIECES.queen.hp);
+  assert.equal(pawn.damage, game.PIECES.queen.damage);
+  assert.equal(pawn.speed, game.PIECES.queen.speed);
+  assert.equal(game.canAttack(pawn, target), true);
+  assert.equal(game.state.log.at(-1).text, "White pawn promoted to queen.");
+});
+
+test("black pawn promotes on the bottom row", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const pawn = addPiece(game, "enemy", "pawn", 8, 4);
+
+  await game.resolveMove(pawn, { row: 9, col: 4 }, "reaching promotion");
+
+  assert.equal(pawn.type, "queen");
+  assert.equal(pawn.hp, game.PIECES.queen.hp);
+  assert.equal(pawn.maxHp, game.PIECES.queen.hp);
+  assert.equal(pawn.damage, game.PIECES.queen.damage);
+  assert.equal(pawn.speed, game.PIECES.queen.speed);
+  assert.equal(game.state.log.at(-1).text, "Black pawn promoted to queen.");
+});
+
 test("opening pawns get initiative before non-pawn pieces and player wins pawn ties", () => {
   const game = loadGame();
   emptyBoard(game);
@@ -455,6 +488,30 @@ test("opening pawns get initiative before non-pawn pieces and player wins pawn t
 
   assert.equal(playerPawn.initiative, game.ACTION_THRESHOLD);
   assert.equal(game.chooseNextActor(), playerPawn);
+});
+
+test("same-priority initiative ties alternate player and enemy by board order", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const playerFront = addPiece(game, "player", "knight", 7, 1);
+  const playerBack = addPiece(game, "player", "knight", 8, 6);
+  const enemyFront = addPiece(game, "enemy", "knight", 1, 2);
+  const enemyBack = addPiece(game, "enemy", "knight", 2, 5);
+
+  [playerFront, playerBack, enemyFront, enemyBack].forEach((piece) => {
+    piece.initiative = game.ACTION_THRESHOLD;
+  });
+
+  assert.equal(game.chooseNextActor(), playerFront);
+  playerFront.initiative = 0;
+
+  assert.equal(game.chooseNextActor(), enemyFront);
+  enemyFront.initiative = 0;
+
+  assert.equal(game.chooseNextActor(), playerBack);
+  playerBack.initiative = 0;
+
+  assert.equal(game.chooseNextActor(), enemyBack);
 });
 
 test("initiative readiness percentage is clamped", () => {

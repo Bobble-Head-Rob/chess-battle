@@ -397,6 +397,7 @@ const state = {
   log: [],
   scenarioEnemyArmy: [],
   enemyBudgetUsed: 0,
+  pendingTieGroup: null,
 };
 
 function currentScenario() {
@@ -665,6 +666,7 @@ function resetState() {
   state.ticks = 0;
   state.scoreSnapshot = null;
   state.log = [];
+  state.pendingTieGroup = null;
   refreshScenarioEnemyArmy();
   clearEffects();
   placeEnemyArmy();
@@ -1548,6 +1550,7 @@ async function takeOneAction() {
 function chooseNextActor() {
   let living = state.pieces.filter((piece) => piece.hp > 0);
   if (living.length === 0) {
+    state.pendingTieGroup = null;
     return null;
   }
 
@@ -1560,20 +1563,51 @@ function chooseNextActor() {
     ready = living.filter((piece) => piece.initiative >= ACTION_THRESHOLD);
   }
 
-  return ready.sort(compareInitiative)[0];
+  const highestInitiative = Math.max(...ready.map((piece) => piece.initiative));
+  const highestSpeed = ready
+    .filter((piece) => piece.initiative === highestInitiative)
+    .reduce((best, piece) => Math.max(best, piece.speed), -Infinity);
+  const tiedGroup = ready.filter((piece) => piece.initiative === highestInitiative && piece.speed === highestSpeed);
+  const tieGroupKey = tiedGroupKeyForPieces(highestInitiative, highestSpeed);
+  const playerGroup = tiedGroup.filter((piece) => piece.side === "player").sort(compareBoardOrder);
+  const enemyGroup = tiedGroup.filter((piece) => piece.side === "enemy").sort(compareBoardOrder);
+
+  if (playerGroup.length > 0 && enemyGroup.length > 0) {
+    const preferredSide = state.pendingTieGroup?.key === tieGroupKey ? state.pendingTieGroup.nextSide : "player";
+    const chosenSide = preferredSide === "player" ? "player" : "enemy";
+    state.pendingTieGroup = {
+      key: tieGroupKey,
+      nextSide: opponentSide(chosenSide),
+    };
+    return (chosenSide === "player" ? playerGroup : enemyGroup)[0];
+  }
+
+  state.pendingTieGroup = null;
+  return tiedGroup.sort(compareBoardOrder)[0];
 }
 
 function compareInitiative(a, b) {
   if (b.initiative !== a.initiative) {
     return b.initiative - a.initiative;
   }
-  if (a.side !== b.side) {
-    return a.side === "player" ? -1 : 1;
-  }
   if (b.speed !== a.speed) {
     return b.speed - a.speed;
   }
+  return compareBoardOrder(a, b);
+}
+
+function compareBoardOrder(a, b) {
+  if (a.row !== b.row) {
+    return a.row - b.row;
+  }
+  if (a.col !== b.col) {
+    return a.col - b.col;
+  }
   return a.id - b.id;
+}
+
+function tiedGroupKeyForPieces(initiative, speed) {
+  return `${state.ticks}|${initiative}|${speed}`;
 }
 
 function prepareOpeningInitiative() {
@@ -2353,6 +2387,9 @@ async function resolveAttack(actor, target) {
     addActionLog(message);
   }
   if (target.hp <= 0 && shouldMoveIntoTarget(actor)) {
+    promotePawnIfNeeded(actor);
+  }
+  if (target.hp <= 0 && shouldMoveIntoTarget(actor)) {
     await resolveOpportunityAttack(actor, from, to);
   }
 }
@@ -2367,14 +2404,36 @@ async function resolveMove(actor, move, reason) {
   actor.previousCol = from.col;
   actor.row = move.row;
   actor.col = move.col;
-  if (actor.type === "pawn" && isPawnOpeningAction(actor)) {
+  const openingPawnMove = actor.type === "pawn" && isPawnOpeningAction(actor);
+  if (openingPawnMove) {
     const squares = Math.abs(move.row - from.row);
     addActionLog(`${pieceName(actor)} from ${squareName(from.row, from.col)} advances ${squares === 2 ? "two squares" : "one square"} to ${squareName(move.row, move.col)}.`);
+    promotePawnIfNeeded(actor);
     await resolveOpportunityAttack(actor, from, move);
     return;
   }
   addActionLog(`${pieceName(actor)} from ${squareName(from.row, from.col)} moves to ${squareName(move.row, move.col)}, ${reason}.`);
+  promotePawnIfNeeded(actor);
   await resolveOpportunityAttack(actor, from, move);
+}
+
+function promotePawnIfNeeded(piece) {
+  if (piece.type !== "pawn") {
+    return false;
+  }
+  const reachedBackRank = piece.side === "player" ? piece.row === 0 : piece.row === boardRows() - 1;
+  if (!reachedBackRank) {
+    return false;
+  }
+
+  const queen = PIECES.queen;
+  piece.type = "queen";
+  piece.hp = queen.hp;
+  piece.maxHp = queen.hp;
+  piece.damage = queen.damage;
+  piece.speed = queen.speed;
+  addActionLog(`${piece.side === "player" ? "White" : "Black"} pawn promoted to queen.`);
+  return true;
 }
 
 async function resolveOpportunityAttack(actor, from, to) {
