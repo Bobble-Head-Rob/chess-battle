@@ -234,10 +234,10 @@ const SCENARIOS = {
   equalBudgetScramble: {
     label: "Equal Budget Scramble",
     boardSize: 8,
-    budget: 50,
+    budget: 35,
     playerDeployRows: 2,
     enemyDeployRows: 2,
-    summary: "8x8 board · 50 budget · no blockers · enemy army rerolls in the top two rows",
+    summary: "8x8 board · 35 budget · no blockers · enemy army rerolls in the top two rows",
     randomEnemy: true,
   },
 };
@@ -464,12 +464,13 @@ function weightedPick(choices, random = Math.random) {
 }
 
 function generateEqualBudgetScrambleArmy(config = {}, random = Math.random) {
-  const budget = config.budget ?? 50;
+  const budget = config.budget ?? 35;
   const rows = config.rows ?? 8;
   const cols = config.cols ?? 8;
   const deployRows = config.enemyDeployRows ?? 2;
   const maxUnits = deployRows * cols;
   const minSpend = Math.ceil(budget * 0.85);
+  const minFrontliners = budget >= 42 ? 4 : 3;
   const baselineOptions = [
     ["pawn", "pawn", "pawn", "pawn", "knight"],
     ["pawn", "pawn", "pawn", "pawn", "pawn", "knight"],
@@ -505,8 +506,8 @@ function generateEqualBudgetScrambleArmy(config = {}, random = Math.random) {
 
       const frontliners = (counts.pawn || 0) + (counts.knight || 0) + (counts.king || 0);
       const choices = [
-        { type: "pawn", weight: remaining >= 1 ? (frontliners < 6 ? 4.8 : remaining <= 4 ? 3.8 : 2.2) : 0 },
-        { type: "knight", weight: remaining >= 3 ? (frontliners < 5 ? 3.4 : 2.1) : 0 },
+        { type: "pawn", weight: remaining >= 1 ? (frontliners < minFrontliners + 2 ? 4.8 : remaining <= 4 ? 3.8 : 2.2) : 0 },
+        { type: "knight", weight: remaining >= 3 ? (frontliners < minFrontliners + 1 ? 3.4 : 2.1) : 0 },
         { type: "bishop", weight: remaining >= 4 ? 2.3 : 0 },
         { type: "rook", weight: remaining >= 5 && (counts.rook || 0) < 2 ? 1.35 : 0 },
         { type: "queen", weight: remaining >= 9 && (counts.queen || 0) < 1 ? 0.7 : 0 },
@@ -532,7 +533,7 @@ function generateEqualBudgetScrambleArmy(config = {}, random = Math.random) {
 
     const frontliners = (counts.pawn || 0) + (counts.knight || 0) + (counts.king || 0);
     const canAffordPawn = spent < budget && army.length < maxUnits;
-    if (frontliners < 4 && canAffordPawn) {
+    if (frontliners < minFrontliners && canAffordPawn) {
       army.push({ type: "pawn" });
       counts.pawn = (counts.pawn || 0) + 1;
       spent += PIECES.pawn.cost;
@@ -541,7 +542,7 @@ function generateEqualBudgetScrambleArmy(config = {}, random = Math.random) {
     const score =
       spent * 5
       - Math.abs(budget - spent) * 4
-      - Math.max(0, 4 - frontliners) * 18
+      - Math.max(0, minFrontliners - frontliners) * 18
       - Math.max(0, (counts.queen || 0) - 1) * 60
       - Math.max(0, (counts.rook || 0) - 2) * 45
       - Math.max(0, 5 - army.length) * 8
@@ -550,7 +551,7 @@ function generateEqualBudgetScrambleArmy(config = {}, random = Math.random) {
     const candidate = { army, spent, counts, score };
     if (spent >= minSpend && (!bestCandidate || candidate.score > bestCandidate.score)) {
       bestCandidate = candidate;
-      if (spent === budget && frontliners >= 4) {
+      if (spent === budget && frontliners >= minFrontliners) {
         break;
       }
     } else if (!bestCandidate || candidate.score > bestCandidate.score) {
