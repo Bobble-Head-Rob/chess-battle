@@ -447,6 +447,34 @@ test("pawn diagonal attacks still work and forward squares are not threatened", 
   assert.equal(game.decideAction(pawn).kind, "attack");
 });
 
+test("enemy pawn on row 2 advances when the forward square is clear", () => {
+  const game = loadGame();
+  emptyBoard(game, "equalBudgetScramble");
+  const pawn = addPiece(game, "enemy", "pawn", 2, 4);
+  pawn.hasMoved = true;
+  pawn.openingActionUsed = true;
+  addPiece(game, "player", "bishop", 8, 7);
+
+  const move = game.chooseMove(pawn);
+
+  assert.notEqual(move, null);
+  assert.equal(move.row, 3);
+  assert.equal(move.col, 4);
+});
+
+test("pawn with no capture available still advances if forward square is clear", () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const pawn = addPiece(game, "player", "pawn", 5, 4);
+  addPiece(game, "enemy", "bishop", 0, 7);
+
+  const move = game.chooseMove(pawn);
+
+  assert.notEqual(move, null);
+  assert.equal(move.row, 4);
+  assert.equal(move.col, 4);
+});
+
 test("white pawn promotes on the top row and gains queen behavior", async () => {
   const game = loadGame();
   emptyBoard(game);
@@ -461,6 +489,38 @@ test("white pawn promotes on the top row and gains queen behavior", async () => 
   assert.equal(pawn.damage, game.PIECES.queen.damage);
   assert.equal(pawn.speed, game.PIECES.queen.speed);
   assert.equal(game.canAttack(pawn, target), true);
+  assert.equal(game.state.log.at(-1).text, "White pawn promoted to queen.");
+});
+
+test("enemy pawn one move from promotion advances and promotes", async () => {
+  const game = loadGame();
+  emptyBoard(game, "equalBudgetScramble");
+  const pawn = addPiece(game, "enemy", "pawn", 6, 4);
+  pawn.hasMoved = true;
+  pawn.openingActionUsed = true;
+  addPiece(game, "player", "bishop", 0, 0);
+
+  const move = game.chooseMove(pawn);
+
+  assert.notEqual(move, null);
+  assert.equal(move.row, 7);
+  await game.resolveMove(pawn, { row: move.row, col: move.col }, move.reason);
+  assert.equal(pawn.type, "queen");
+  assert.equal(game.state.log.at(-1).text, "Black pawn promoted to queen.");
+});
+
+test("player pawn near promotion advances and promotes", async () => {
+  const game = loadGame();
+  emptyBoard(game);
+  const pawn = addPiece(game, "player", "pawn", 1, 3);
+  addPiece(game, "enemy", "bishop", 7, 7);
+
+  const move = game.chooseMove(pawn);
+
+  assert.notEqual(move, null);
+  assert.equal(move.row, 0);
+  await game.resolveMove(pawn, { row: move.row, col: move.col }, move.reason);
+  assert.equal(pawn.type, "queen");
   assert.equal(game.state.log.at(-1).text, "White pawn promoted to queen.");
 });
 

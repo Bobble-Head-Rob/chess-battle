@@ -1749,6 +1749,17 @@ function chooseMove(actor) {
       }
     }
 
+    if (actor.type === "pawn") {
+      const pawnAdvance = scorePawnAdvance(actor, move);
+      moveScore += pawnAdvance.score;
+      if (pawnAdvance.useful) {
+        useful = true;
+        if (moveReason === "closing distance" || moveReason === "setting up an attack") {
+          moveReason = pawnAdvance.reason;
+        }
+      }
+    }
+
     if (safety.danger.attackers === 0 && currentSafety.danger.attackers > 0 && moveReason === "closing distance") {
       moveReason = "stepping out of danger";
     }
@@ -2269,6 +2280,37 @@ function visibleLineTargets(actor, row, col) {
 function scorePawnForwardPressure(actor, row, col, targets) {
   const forward = pawnForward(actor.side);
   return targets.some((target) => target.row === row + forward && Math.abs(target.col - col) === 1) ? 18 : 0;
+}
+
+function scorePawnAdvance(actor, move) {
+  const forwardProgress = toForwardProgress(actor, move);
+  if (forwardProgress <= 0) {
+    return { score: 0, useful: false, reason: "closing distance" };
+  }
+
+  const distanceAfterMove = promotionDistance(actor.side, move.row);
+  let score = 26 + forwardProgress * 22;
+  let reason = "advancing";
+
+  if (distanceAfterMove === 0) {
+    score += 260;
+    reason = "promoting";
+  } else if (distanceAfterMove === 1) {
+    score += 140;
+    reason = "advancing toward promotion";
+  } else if (distanceAfterMove <= 2) {
+    score += 80;
+    reason = "advancing toward promotion";
+  } else if (distanceAfterMove <= 4) {
+    score += 36;
+    reason = "pressing toward promotion";
+  }
+
+  return { score, useful: true, reason };
+}
+
+function promotionDistance(side, row) {
+  return side === "player" ? row : boardRows() - 1 - row;
 }
 
 function isAdjacentToEnemyPawn(actor, row, col) {
