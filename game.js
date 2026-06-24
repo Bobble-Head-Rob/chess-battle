@@ -1,10 +1,12 @@
 const ACTION_THRESHOLD = 10;
 const DEFAULT_ACTION_LIMIT = 500;
 const FILES = "ABCDEFGHIJKL";
+const DEFAULT_SCENARIO_ID = "equalBudgetScramble";
 
 const SCENARIOS = {
   variety: {
     label: "Variety Skirmish",
+    legacy: true,
     boardSize: 10,
     budget: 50,
     summary: "10x10 board · 50 budget",
@@ -29,6 +31,7 @@ const SCENARIOS = {
   },
   swarm: {
     label: "Pawn/Knight Swarm",
+    legacy: true,
     boardSize: 12,
     budget: 55,
     summary: "12x12 board · 55 budget",
@@ -67,6 +70,7 @@ const SCENARIOS = {
   },
   brokenCenter: {
     label: "Broken Center",
+    legacy: true,
     boardSize: 8,
     budget: 34,
     playerDeployRows: 2,
@@ -92,6 +96,7 @@ const SCENARIOS = {
   },
   pillarGarden: {
     label: "Pillar Garden",
+    legacy: true,
     rows: 10,
     cols: 8,
     budget: 35,
@@ -131,6 +136,7 @@ const SCENARIOS = {
   },
   twinCauseways: {
     label: "Twin Causeways",
+    legacy: true,
     rows: 12,
     cols: 7,
     budget: 34,
@@ -174,6 +180,7 @@ const SCENARIOS = {
   },
   fortressRing: {
     label: "Fortress Ring",
+    legacy: true,
     rows: 10,
     cols: 10,
     budget: 36,
@@ -343,6 +350,8 @@ const enemyCompositionEl = document.getElementById("enemyComposition");
 const placementHintEl = document.getElementById("placementHint");
 const inspectHintEl = document.getElementById("inspectHint");
 const inspectDetailsEl = document.getElementById("inspectDetails");
+const scenarioControlEl = document.getElementById("scenarioControl");
+const scenarioLabelEl = document.getElementById("scenarioLabel");
 const overlayMovesEl = document.getElementById("overlayMoves");
 const overlayAttacksEl = document.getElementById("overlayAttacks");
 const overlayThreatEl = document.getElementById("overlayThreat");
@@ -369,7 +378,7 @@ let masterGain = null;
 
 const state = {
   pieces: [],
-  scenarioId: "variety",
+  scenarioId: DEFAULT_SCENARIO_ID,
   budget: 0,
   selectedType: "pawn",
   phase: "setup",
@@ -402,6 +411,10 @@ const state = {
 
 function currentScenario() {
   return SCENARIOS[state.scenarioId];
+}
+
+function visibleScenarioEntries() {
+  return Object.entries(SCENARIOS).filter(([, scenario]) => !scenario.legacy);
 }
 
 function boardSize() {
@@ -703,18 +716,24 @@ function render() {
 }
 
 function renderScenarioSelect() {
-  if (scenarioSelectEl.children.length === Object.keys(SCENARIOS).length) {
+  const visibleScenarios = visibleScenarioEntries();
+  if (scenarioSelectEl.children.length === visibleScenarios.length) {
     scenarioSelectEl.value = state.scenarioId;
-    return;
+  } else {
+    scenarioSelectEl.innerHTML = "";
+    visibleScenarios.forEach(([id, scenario]) => {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = scenario.label;
+      scenarioSelectEl.appendChild(option);
+    });
+    scenarioSelectEl.value = state.scenarioId;
   }
-  scenarioSelectEl.innerHTML = "";
-  Object.entries(SCENARIOS).forEach(([id, scenario]) => {
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = scenario.label;
-    scenarioSelectEl.appendChild(option);
-  });
-  scenarioSelectEl.value = state.scenarioId;
+
+  const singlePublicScenario = visibleScenarios.length <= 1;
+  scenarioControlEl.classList.toggle("primary-only", singlePublicScenario);
+  scenarioSelectEl.hidden = singlePublicScenario;
+  scenarioLabelEl.textContent = singlePublicScenario ? "Primary Scenario" : "Scenario";
 }
 
 function renderShop() {

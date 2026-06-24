@@ -299,6 +299,15 @@ select:disabled {
   line-height: 1.35;
 }
 
+.scenario-control.primary-only {
+  gap: 4px;
+}
+
+.scenario-control.primary-only p {
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .inspect-panel {
   display: grid;
   gap: 10px;

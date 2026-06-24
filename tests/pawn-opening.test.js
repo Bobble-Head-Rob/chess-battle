@@ -294,6 +294,8 @@ globalThis.__game = {
   budgetValueEl,
   enemyBudgetUsedEl,
   rerollEnemyButton,
+  scenarioSelectEl,
+  scenarioLabelEl,
   soundToggleEl,
   soundVolumeEl,
   squareKey,
@@ -1238,6 +1240,7 @@ test("attack animation creates damage and kill effect nodes", async () => {
   emptyBoard(game);
   const actor = addPiece(game, "player", "pawn", 8, 4);
   const target = addPiece(game, "enemy", "pawn", 7, 5);
+  game.renderBoard();
 
   const animation = game.animateAttack(actor, target, true);
   await Promise.resolve();
@@ -1354,6 +1357,39 @@ test("equal budget scramble reset populates random enemy army and updates scenar
     assert.ok(piece.row >= 0 && piece.row <= 1);
     assert.ok(piece.col >= 0 && piece.col <= 7);
   });
+});
+
+test("game defaults to equal budget scramble and hides legacy scenarios from normal UI", () => {
+  const game = loadGame();
+
+  assert.equal(game.state.scenarioId, "equalBudgetScramble");
+  assert.equal(game.boardRows(), 8);
+  assert.equal(game.boardCols(), 8);
+  assert.equal(game.state.budget, 35);
+  assert.equal(game.rerollEnemyButton.hidden, false);
+  assert.equal(game.scenarioSelectEl.hidden, true);
+  assert.equal(game.scenarioLabelEl.textContent, "Primary Scenario");
+  assert.equal(game.scenarioSelectEl.children.length, 1);
+  assert.equal(game.scenarioSelectEl.children[0].value, "equalBudgetScramble");
+  assert.equal(game.SCENARIOS.variety.legacy, true);
+  assert.equal(game.SCENARIOS.equalBudgetScramble.legacy, undefined);
+});
+
+test("equal budget scramble reroll keeps setup playable and refreshes the enemy army", () => {
+  const game = loadGame();
+  const before = game.state.scenarioEnemyArmy.map((piece) => `${piece.type}:${piece.row},${piece.col}`).join("|");
+
+  game.rerollEnemyArmy();
+
+  const after = game.state.scenarioEnemyArmy.map((piece) => `${piece.type}:${piece.row},${piece.col}`).join("|");
+  assert.equal(game.state.scenarioId, "equalBudgetScramble");
+  assert.equal(game.state.phase, "setup");
+  assert.ok(game.state.scenarioEnemyArmy.length > 0);
+  assert.ok(game.state.enemyBudgetUsed >= 30);
+  assert.equal(game.state.log.at(-1).text.includes("Enemy rerolled."), true);
+  assert.equal(game.rerollEnemyButton.hidden, false);
+  assert.notEqual(after.length, 0);
+  assert.notEqual(before, undefined);
 });
 
 for (const scenarioId of ["variety", "swarm", "brokenCenter", "pillarGarden", "twinCauseways", "fortressRing", "equalBudgetScramble"]) {
