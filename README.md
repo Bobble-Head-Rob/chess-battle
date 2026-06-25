@@ -1,26 +1,57 @@
-# Greg’s Totally Inaccurate Chess Simulator
+# Greg's Totally Inaccurate Chess Simulator
 
-A browser-based chess-piece auto-battler inspired by Totally Accurate Battle Simulator.
+A playful browser-based chess battle simulator where you buy a small army, deploy it in the blue zone, and watch the fight resolve through initiative, movement, attacks, and a very chatty battle log.
 
-Core idea:
-- Player buys chess pieces from a resource pool.
-- Enemy army is pre-placed.
-- Pieces move and fight on a chess-like board.
-- Battle resolves through initiative, simple AI, animations, and a readable action log.
+The current default mode is **Equal Budget Scramble**:
+- Standard 8x8 board
+- 35-point budget for both sides
+- Randomly generated enemy army
+- `Reroll Enemy` button for fresh matchups before the battle starts
 
-v0 scope:
-- Local browser app.
-- No backend required unless useful.
-- Readable 2D board.
-- Piece placement.
-- Scenario selection.
-- Collapsible How to Play help and piece inspection panels.
-- Tactical movement, attack, threat, and protection overlays.
-- Start/pause/step battle loop.
-- Optional browser-generated sound effects with volume control.
-- Initiative system.
-- Basic piece AI.
+## Play Online
 
-Scenarios:
-- Variety Skirmish: 10x10 board, 50 player budget, 8 pawns, 4 knights, 2 bishops, 1 rook, and 1 queen.
-- Pawn/Knight Swarm: 12x12 board, 55 player budget, 20 pawns and 10 knights.
+Live game:
+
+https://bobble-head-rob.github.io/chess-battle/
+
+## What You Do
+
+- Spend your 35-point budget on chess-inspired units.
+- Deploy your army in the blue starting zone at the bottom of the board.
+- Inspect both sides before the fight begins.
+- Start the battle and watch the turn order unfold by initiative.
+
+## Main Features
+
+- Chess-inspired piece roster with distinct movement and attack behavior
+- Equal Budget Scramble as the primary/default mode
+- Random enemy army generation with rerolls before battle
+- Initiative-driven combat with tie alternation for clearer action order
+- Automatic pawn promotion to queens
+- Inspect panel for piece stats and readiness
+- Board overlays for moves, attacks, threat, and protection
+- Detailed battle log for readable combat outcomes
+- Pause and step controls for slow, inspectable battles
+- Optional browser-generated sound with volume control
+
+## Run Locally
+
+This project is a small static site with no backend.
+
+1. Clone the repo.
+2. Start a local static server from the project folder.
+
+Example with Python:
+
+```bash
+python3 -m http.server 18999
+```
+
+Then open:
+
+http://127.0.0.1:18999/
+
+## Project Notes
+
+- The public UI is focused on Equal Budget Scramble.
+- Older scenario architecture is still kept in code for future expansion and testing.

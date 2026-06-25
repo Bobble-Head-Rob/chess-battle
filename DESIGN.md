@@ -1,71 +1,25 @@
-# Greg’s Totally Inaccurate Chess Simulator Design
+# Greg's Totally Inaccurate Chess Simulator Design
 
-## v0 Combat Rules
+## Public Design Snapshot
 
-Ranged pieces:
-- Bishop, rook, queen.
-- Attack from current square.
-- Always remain on original square.
-- Visual attack beam/pulse.
-- Counterattack targets their original square.
+- Primary mode: Equal Budget Scramble
+- Board: standard 8x8
+- Budgets: 35 points for player and enemy
+- Deployment: player in the bottom two rows, enemy in the top two rows
+- Enemy army: randomly generated, rerollable before battle
 
-Melee pieces:
-- Pawn and king.
-- If attack kills target, move into target square.
-- If attack does not kill target, stay in original square for v0.
+## Combat Rules
 
-Pawns:
-- Player pawns move one square straight upward if empty.
-- Enemy pawns move one square straight downward if empty.
-- Pawns attack one square diagonally forward only when an enemy occupies that square.
-- Pawns hold if blocked and no legal diagonal attack is available.
+- Initiative is tracked per piece.
+- When a true top-priority tie happens, actions alternate player/enemy until that tie group is resolved.
+- Ranged pieces attack from their current square.
+- Pawns and kings are melee movers.
+- Knights leap to attack and return if the target survives.
+- Pawns promote automatically to queens on the back rank.
+- Kings can punish pieces that move out of adjacency with opportunity attacks.
 
-Knight:
-- Short-ranged leaping striker.
-- Attacks using L-shape range.
-- If target dies, knight moves into target square.
-- If target survives, knight returns to original square.
-- Visual: hop/strike/return.
+## UX Goals
 
-## Initiative
-
-- Initiative is per piece, not per side.
-- Each piece has speed.
-- Each tick adds speed to initiative.
-- At 10 initiative, a piece acts.
-- After acting, subtract 10 initiative.
-- Player wins ties.
-- Guard/hold can cost less initiative later.
-
-Starter speeds:
-- Pawn: 2
-- Knight: 3
-- Bishop: 2
-- Rook: 1
-- Queen: 2
-- King: 1
-
-## v0 Board
-
-- Scenario selector resets the board, budget, log, and battle state.
-- Default scenario: Variety Skirmish.
-- Variety Skirmish board: 10x10.
-- Variety Skirmish player budget: 50.
-- Variety Skirmish enemy army: 8 pawns, 4 knights, 2 bishops, 1 rook, 1 queen.
-- Alternate scenario: Pawn/Knight Swarm.
-- Pawn/Knight Swarm board: 12x12.
-- Pawn/Knight Swarm player budget: 55.
-- Pawn/Knight Swarm enemy army: 20 pawns and 10 knights.
-- Player deploys in bottom 3 rows.
-- Enemy deploys in top 3 rows.
-
-## v0 UI
-
-- Browser-based.
-- Piece placement toolbar.
-- Budget display.
-- Start / pause / step / reset.
-- Speed control.
-- Animated attacks.
-- Battle log.
-- Win/loss state.
+- Keep battles readable.
+- Let players inspect why units moved or attacked.
+- Make randomness easy to understand through deployment, overlays, and the battle log.
