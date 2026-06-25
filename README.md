@@ -1,6 +1,8 @@
-# Greg's Totally Inaccurate Chess Simulator
+# Totally Inaccurate Chess Simulator
 
 A playful browser-based chess battle simulator where you buy a small army, deploy it in the blue zone, and watch the fight resolve through initiative, movement, attacks, and a very chatty battle log.
+
+Dedicated subtitle: `A chess battle sim in Greg's honor`
 
 The current default mode is **Equal Budget Scramble**:
 - Standard 8x8 board

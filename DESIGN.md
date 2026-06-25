@@ -1,4 +1,4 @@
-# Greg's Totally Inaccurate Chess Simulator Design
+# Totally Inaccurate Chess Simulator Design
 
 ## Public Design Snapshot
 
