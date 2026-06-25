@@ -312,7 +312,7 @@ const PIECE_ROLES = {
   bishop: "Diagonal ranged attacker.",
   rook: "Straight-line ranged attacker.",
   queen: "Powerful ranged attacker.",
-  king: "Slow melee bruiser.",
+  king: "Slow melee bruiser. Makes an opportunity attack when an adjacent enemy moves away.",
 };
 
 const SPEEDS = {
