@@ -6,3 +6,11 @@ __pycache__/
 .DS_Store
 
 .openclaw/
+
+# Local agent/workspace notes
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
